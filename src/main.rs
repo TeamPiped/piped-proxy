@@ -13,9 +13,9 @@ use reqwest::{Client, Request, Url};
 async fn main() -> std::io::Result<()> {
     println!("Running server!");
 
-    let server =HttpServer::new(|| {
+    let server = HttpServer::new(|| {
         // match all requests
-         App::new()
+        App::new()
             .default_service(web::to(index))
     });
     // get port from env
@@ -60,10 +60,14 @@ fn is_header_allowed(header: &str) -> bool {
         return false;
     }
 
-    match header {
-        "host" | "content-length" | "set-cookie" | "alt-svc" | "accept-ch" | "report-to" | "strict-transport-security" => false,
-        _ => true,
-    }
+    !matches!(header, "host" |
+        "content-length" |
+        "set-cookie" |
+        "alt-svc" |
+        "accept-ch" |
+        "report-to" |
+        "strict-transport-security" |
+        "user-agent")
 }
 
 async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
@@ -117,6 +121,8 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
 
     let request_headers = request.headers_mut();
 
+    request_headers.insert("User-Agent", "Mozilla/5.0 (Windows NT 10.0; rv:91.0) Gecko/20100101 Firefox/91.0".parse().unwrap());
+
     for (key, value) in req.headers() {
         if is_header_allowed(key.as_str()) {
             request_headers.insert(key.clone(), value.clone());
@@ -167,8 +173,8 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
 
             let modified = resp_str.lines().map(|line| {
                 let captures = RE_MANIFEST.captures(line);
-                if captures.is_some() {
-                    let url = captures.unwrap().get(1).unwrap().as_str();
+                if let Some(captures) = captures {
+                    let url = captures.get(1).unwrap().as_str();
                     if url.starts_with("https://") {
                         return line.replace(url, localize_url(url, host).as_str());
                     }
@@ -196,12 +202,12 @@ fn localize_url(url: &str, host: &str) -> String {
             .append_pair("host", &host);
 
         return format!("{}?{}", url.path(), url.query().unwrap());
-    } else if url.starts_with("/") {
-        return if url.contains("?") {
+    } else if url.starts_with('/') {
+        return if url.contains('?') {
             format!("{}&host={}", url, host)
         } else {
             format!("{}?host={}", url, host)
-        }
+        };
     }
 
     url.to_string()
