@@ -34,7 +34,19 @@ lazy_static!(
 );
 
 lazy_static!(
-    static ref CLIENT: Client = Client::new();
+    static ref CLIENT: Client = {
+        let builder = Client::builder()
+            .user_agent("Mozilla/5.0 (Windows NT 10.0; rv:91.0) Gecko/20100101 Firefox/91.0");
+
+        if env::var("IPV4_ONLY").is_ok() {
+            builder
+            .local_address(Some("0.0.0.0".parse().unwrap()))
+            .build()
+            .unwrap()
+        } else {
+            builder.build().unwrap()
+        }
+    };
 );
 
 const ALLOWED_DOMAINS: [&str; 7] = [
@@ -120,8 +132,6 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
     );
 
     let request_headers = request.headers_mut();
-
-    request_headers.insert("User-Agent", "Mozilla/5.0 (Windows NT 10.0; rv:91.0) Gecko/20100101 Firefox/91.0".parse().unwrap());
 
     for (key, value) in req.headers() {
         if is_header_allowed(key.as_str()) {
