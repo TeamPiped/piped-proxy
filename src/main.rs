@@ -1,3 +1,4 @@
+use std::env;
 use std::error::Error;
 
 use actix_web::{App, HttpRequest, HttpResponse, HttpResponseBuilder, HttpServer, web};
@@ -12,15 +13,18 @@ use reqwest::{Client, Request, Url};
 async fn main() -> std::io::Result<()> {
     println!("Running server!");
 
-    HttpServer::new(|| {
+    let server =HttpServer::new(|| {
         // match all requests
-        App::new()
+         App::new()
             .default_service(web::to(index))
-    })
-        .bind("0.0.0.0:8080")?
-        .bind_uds("./socket/actix.sock")?
-        .run()
-        .await
+    });
+    // get port from env
+    if env::var("UDS").is_ok() {
+        server.bind_uds("./socket/actix.sock")?
+    } else {
+        let bind = env::var("BIND").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
+        server.bind(bind)?
+    }.run().await
 }
 
 lazy_static!(
