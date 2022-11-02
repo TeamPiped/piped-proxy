@@ -188,10 +188,8 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
                     if url.starts_with("https://") {
                         return line.replace(url, localize_url(url, host).as_str());
                     }
-                } else if line.starts_with("https://") {
-                    return localize_url(line, host);
                 }
-                line.to_string()
+                localize_url(line, host)
             }).collect::<Vec<String>>().join("\n");
 
             return Ok(response.body(modified));
@@ -212,7 +210,7 @@ fn localize_url(url: &str, host: &str) -> String {
             .append_pair("host", &host);
 
         return format!("{}?{}", url.path(), url.query().unwrap());
-    } else if url.starts_with('/') {
+    } else if url.ends_with(".m3u8") || url.ends_with(".ts") {
         return if url.contains('?') {
             format!("{}&host={}", url, host)
         } else {
