@@ -107,9 +107,12 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
         return Err("Domain not allowed".into());
     }
 
+    let mut url = Url::parse(&*format!("https://{}{}", host, req.path()))?;
+    url.set_query(Some(req.query_string()));
+
     let mut request = Request::new(
         req.method().clone(),
-        format!("https://{}{}", host, req.path()).parse().unwrap(),
+        url,
     );
 
     let request_headers = request.headers_mut();
