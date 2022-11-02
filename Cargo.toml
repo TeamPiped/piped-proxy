@@ -1,0 +1,16 @@
+[package]
+edition = "2021"
+name = "piped-proxy"
+version = "0.1.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+actix-web = "4.2.1"
+image = "0.24.4"
+lazy_static = "1.4.0"
+qstring = "0.7.2"
+regex = "1.6.0"
+reqwest = {version = "0.11.12", features = ["rustls-tls", "stream", "brotli", "gzip"], default-features = false}
+tokio = {version = "1.21.2", features = ["full"]}
+webp = "0.2.2"
