@@ -28,8 +28,7 @@ async fn main() -> std::io::Result<()> {
 }
 
 lazy_static!(
-    static ref RE: Regex = Regex::new(r"^[a-z\d\.-]*$").unwrap();
-    static ref RE_DOMAIN: Regex = Regex::new(r"(?:^[a-z\d\.-]*\.)?((?:[a-z\d-]*)\.(?:[a-z\d-]*))$").unwrap();
+    static ref RE_DOMAIN: Regex = Regex::new(r"^(?:[a-z\d\.-]*\.)?((?:[a-z\d-]*)\.(?:[a-z\d-]*))$").unwrap();
     static ref RE_MANIFEST: Regex = Regex::new("(?m)URI=\"([^\"]+)\"").unwrap();
 );
 
@@ -104,7 +103,7 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
 
     let host = res.unwrap();
 
-    if !RE.is_match(host) || !RE_DOMAIN.is_match(host) {
+    if !RE_DOMAIN.is_match(host) {
         return Err("Invalid host provided".into());
     }
 
