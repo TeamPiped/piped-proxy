@@ -157,10 +157,7 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
         }
     }
 
-    let content_type = resp.headers().get("content-type");
-
-    if content_type.is_some() {
-        let content_type = content_type.unwrap();
+    if let Some(content_type) = resp.headers().get("content-type") {
         if content_type == "image/jpeg" {
             let resp_bytes = resp.bytes().await.unwrap();
 
