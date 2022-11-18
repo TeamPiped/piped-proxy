@@ -30,6 +30,7 @@ async fn main() -> std::io::Result<()> {
 lazy_static!(
     static ref RE_DOMAIN: Regex = Regex::new(r"^(?:[a-z\d\.-]*\.)?((?:[a-z\d-]*)\.(?:[a-z\d-]*))$").unwrap();
     static ref RE_MANIFEST: Regex = Regex::new("(?m)URI=\"([^\"]+)\"").unwrap();
+    static ref RE_DASH_MANIFEST: Regex = Regex::new("BaseURL>(https://[^<]+)</BaseURL").unwrap();
 );
 
 lazy_static!(
@@ -122,7 +123,7 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
         return Err("Domain not allowed".into());
     }
 
-    let mut url = Url::parse(&*format!("https://{}{}", host, req.path()))?;
+    let mut url = Url::parse(&format!("https://{}{}", host, req.path()))?;
     url.set_query(Some(req.query_string()));
 
     let mut request = Request::new(
@@ -189,6 +190,18 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
             }).collect::<Vec<String>>().join("\n");
 
             return Ok(response.body(modified));
+        }
+        if content_type == "video/vnd.mpeg.dash.mpd" || content_type == "application/dash+xml" {
+            let mut resp_str = resp.text().await.unwrap();
+            let clone_resp = resp_str.clone();
+            let captures = RE_DASH_MANIFEST.captures_iter(&clone_resp);
+            for capture in captures {
+                let url = capture.get(1).unwrap().as_str();
+                let new_url = localize_url(url, host);
+                resp_str = resp_str.replace(url, new_url.as_str())
+                    .clone();
+            }
+            return Ok(response.body(resp_str));
         }
     }
 
