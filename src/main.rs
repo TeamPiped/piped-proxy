@@ -98,6 +98,14 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
 
     let res = query.get("host");
 
+    let rewrite = {
+        if let Some(rewrite) = query.get("rewrite") {
+            rewrite == "true"
+        } else {
+            true
+        }
+    };
+
     if res.is_none() {
         return Err("No host provided".into());
     }
@@ -123,8 +131,17 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
         return Err("Domain not allowed".into());
     }
 
+    let qs = {
+        let qs = query.clone();
+        let collected = qs.into_pairs()
+            .into_iter()
+            .filter(|(key, _)| key != "host" && key != "rewrite")
+            .collect::<Vec<_>>();
+        QString::new(collected)
+    };
+
     let mut url = Url::parse(&format!("https://{}{}", host, req.path()))?;
-    url.set_query(Some(req.query_string()));
+    url.set_query(Some(qs.to_string().as_str()));
 
     let mut request = Request::new(
         req.method().clone(),
@@ -157,51 +174,53 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
         }
     }
 
-    if let Some(content_type) = resp.headers().get("content-type") {
-        if content_type == "image/jpeg" {
-            let resp_bytes = resp.bytes().await.unwrap();
+    if rewrite {
+        if let Some(content_type) = resp.headers().get("content-type") {
+            if content_type == "image/jpeg" {
+                let resp_bytes = resp.bytes().await.unwrap();
 
-            let image = image::load_from_memory(&resp_bytes).unwrap();
+                let image = image::load_from_memory(&resp_bytes).unwrap();
 
-            let encoder = webp::Encoder::from_image(&image).unwrap();
+                let encoder = webp::Encoder::from_image(&image).unwrap();
 
-            let encoded = encoder.encode(85f32);
-            let bytes = encoded.as_bytes().to_vec();
+                let encoded = encoder.encode(85f32);
+                let bytes = encoded.as_bytes().to_vec();
 
-            if bytes.len() < resp_bytes.len() {
-                response.content_type("image/webp");
-                return Ok(response.body(bytes));
-            }
-
-            return Ok(response.body(resp_bytes));
-        }
-        if content_type == "application/x-mpegurl" || content_type == "application/vnd.apple.mpegurl" {
-            let resp_str = resp.text().await.unwrap();
-
-            let modified = resp_str.lines().map(|line| {
-                let captures = RE_MANIFEST.captures(line);
-                if let Some(captures) = captures {
-                    let url = captures.get(1).unwrap().as_str();
-                    if url.starts_with("https://") {
-                        return line.replace(url, localize_url(url, host).as_str());
-                    }
+                if bytes.len() < resp_bytes.len() {
+                    response.content_type("image/webp");
+                    return Ok(response.body(bytes));
                 }
-                localize_url(line, host)
-            }).collect::<Vec<String>>().join("\n");
 
-            return Ok(response.body(modified));
-        }
-        if content_type == "video/vnd.mpeg.dash.mpd" || content_type == "application/dash+xml" {
-            let mut resp_str = resp.text().await.unwrap();
-            let clone_resp = resp_str.clone();
-            let captures = RE_DASH_MANIFEST.captures_iter(&clone_resp);
-            for capture in captures {
-                let url = capture.get(1).unwrap().as_str();
-                let new_url = localize_url(url, host);
-                resp_str = resp_str.replace(url, new_url.as_str())
-                    .clone();
+                return Ok(response.body(resp_bytes));
             }
-            return Ok(response.body(resp_str));
+            if content_type == "application/x-mpegurl" || content_type == "application/vnd.apple.mpegurl" {
+                let resp_str = resp.text().await.unwrap();
+
+                let modified = resp_str.lines().map(|line| {
+                    let captures = RE_MANIFEST.captures(line);
+                    if let Some(captures) = captures {
+                        let url = captures.get(1).unwrap().as_str();
+                        if url.starts_with("https://") {
+                            return line.replace(url, localize_url(url, host).as_str());
+                        }
+                    }
+                    localize_url(line, host)
+                }).collect::<Vec<String>>().join("\n");
+
+                return Ok(response.body(modified));
+            }
+            if content_type == "video/vnd.mpeg.dash.mpd" || content_type == "application/dash+xml" {
+                let mut resp_str = resp.text().await.unwrap();
+                let clone_resp = resp_str.clone();
+                let captures = RE_DASH_MANIFEST.captures_iter(&clone_resp);
+                for capture in captures {
+                    let url = capture.get(1).unwrap().as_str();
+                    let new_url = localize_url(url, host);
+                    resp_str = resp_str.replace(url, new_url.as_str())
+                        .clone();
+                }
+                return Ok(response.body(resp_str));
+            }
         }
     }
 
