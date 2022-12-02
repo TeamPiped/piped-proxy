@@ -111,12 +111,13 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
     }
 
     let host = res.unwrap();
+    let domain = RE_DOMAIN.captures(host);
 
-    if !RE_DOMAIN.is_match(host) {
+    if domain.is_none() {
         return Err("Invalid host provided".into());
     }
 
-    let domain = RE_DOMAIN.captures(host).unwrap().get(1).unwrap().as_str();
+    let domain = domain.unwrap().get(1).unwrap().as_str();
 
     let mut allowed = false;
 
