@@ -1,0 +1,56 @@
+version: 2.1
+
+jobs:
+  arm64:
+    machine:
+      image: ubuntu-2004:current
+    resource_class: arm.medium
+    steps:
+      - checkout
+      - run:
+          command: |
+            export DOCKER_BUILDKIT=1 BUILDKIT_PROGRESS=plain
+            docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD
+            docker build -t 1337kavin/piped-proxy:latest-arm64 .
+            docker push 1337kavin/piped-proxy:latest-arm64
+  amd64:
+    machine:
+      image: ubuntu-2004:current
+    resource_class: medium
+    steps:
+      - checkout
+      - run:
+          command: |
+            export DOCKER_BUILDKIT=1 BUILDKIT_PROGRESS=plain
+            docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD
+            docker build -t 1337kavin/piped-proxy:latest-amd64 .
+            docker push 1337kavin/piped-proxy:latest-amd64
+  push:
+    machine:
+      image: ubuntu-2004:current
+    resource_class: medium
+    steps:
+      - run:
+          command: |
+            docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD
+            docker manifest create 1337kavin/piped-proxy:latest 1337kavin/piped-proxy:latest-arm64 1337kavin/piped-proxy:latest-amd64
+            docker manifest push 1337kavin/piped-proxy:latest
+
+workflows:
+  build-docker:
+    jobs:
+      - arm64:
+          filters:
+            branches:
+              only: main
+      - amd64:
+          filters:
+            branches:
+              only: main
+      - push:
+          filters:
+            branches:
+              only: main
+          requires:
+            - arm64
+            - amd64
