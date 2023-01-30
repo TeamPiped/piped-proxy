@@ -12,5 +12,5 @@ lazy_static = "1.4.0"
 qstring = "0.7.2"
 regex = "1.7.1"
 reqwest = {version = "0.11.14", features = ["rustls-tls", "stream", "brotli", "gzip"], default-features = false}
-tokio = {version = "1.24.2", features = ["full"]}
+tokio = {version = "1.25.0", features = ["full"]}
 webp = "0.2.2"
