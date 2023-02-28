@@ -225,6 +225,10 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
         }
     }
 
+    if let Some(content_length) = resp.headers().get("content-length") {
+        response.append_header(("content-length", content_length));
+    }
+
     // Stream response
     Ok(response.streaming(resp.bytes_stream()))
 }
