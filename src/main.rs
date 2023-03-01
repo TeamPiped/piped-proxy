@@ -1,7 +1,9 @@
 use std::env;
 use std::error::Error;
+use std::string::ToString;
 
 use actix_web::{App, HttpRequest, HttpResponse, HttpResponseBuilder, HttpServer, web};
+use actix_web::dev::ResourcePath;
 use actix_web::http::Method;
 use image::EncodableLayout;
 use lazy_static::lazy_static;
@@ -49,6 +51,10 @@ lazy_static!(
     };
 );
 
+lazy_static!(
+    static ref PREFIX_PATH: String = env::var("PREFIX_PATH").unwrap_or_else(|_| "".to_string());
+);
+
 const ALLOWED_DOMAINS: [&str; 7] = [
     "youtube.com",
     "googlevideo.com",
@@ -58,6 +64,7 @@ const ALLOWED_DOMAINS: [&str; 7] = [
     "lbryplayer.xyz",
     "odycdn.com",
 ];
+
 
 fn add_headers(response: &mut HttpResponseBuilder) {
     response
@@ -73,6 +80,11 @@ fn is_header_allowed(header: &str) -> bool {
     }
 
     !matches!(header, "host" |
+        "authorization" |
+        "origin" |
+        "referer" |
+        "cookie" |
+        "etag" |
         "content-length" |
         "set-cookie" |
         "alt-svc" |
@@ -242,7 +254,7 @@ fn localize_url(url: &str, host: &str) -> String {
         url.query_pairs_mut()
             .append_pair("host", &host);
 
-        return format!("{}?{}", url.path(), url.query().unwrap());
+        return format!("{}{}?{}", PREFIX_PATH.as_str(), url.path(), url.query().unwrap());
     } else if url.ends_with(".m3u8") || url.ends_with(".ts") {
         return if url.contains('?') {
             format!("{}&host={}", url, host)
