@@ -10,7 +10,7 @@ actix-web = "4.3.1"
 image = "0.24.5"
 lazy_static = "1.4.0"
 qstring = "0.7.2"
-regex = "1.7.1"
+regex = "1.7.2"
 reqwest = {version = "0.11.15", features = ["rustls-tls", "stream", "brotli", "gzip"], default-features = false}
 tokio = {version = "1.26.0", features = ["full"]}
 webp = "0.2.2"
