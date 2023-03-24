@@ -5,6 +5,7 @@ use actix_web::http::Method;
 use actix_web::{web, App, HttpRequest, HttpResponse, HttpResponseBuilder, HttpServer};
 use image::EncodableLayout;
 use once_cell::sync::Lazy;
+use ua_generator::ua::spoof_ua;
 use qstring::QString;
 use regex::Regex;
 use reqwest::{Client, Request, Url};
@@ -36,7 +37,7 @@ static RE_DASH_MANIFEST: Lazy<Regex> =
 
 static CLIENT: Lazy<Client> = Lazy::new(|| {
     let builder = Client::builder()
-        .user_agent("Mozilla/5.0 (Windows NT 10.0; rv:91.0) Gecko/20100101 Firefox/91.0");
+        .user_agent(spoof_ua());
 
     if env::var("IPV4_ONLY").is_ok() {
         builder
