@@ -27,7 +27,7 @@ async fn main() -> std::io::Result<()> {
     }.run().await
 }
 
-static RE_DOMAIN: Lazy<Regex> = Lazy::new(|| Regex::new(r"^(?:[a-z\d.-]*\.)?((?:[a-z\d-]*)\.(?:[a-z\d-]*))$").unwrap());
+static RE_DOMAIN: Lazy<Regex> = Lazy::new(|| Regex::new(r"^(?:[a-z\d.-]*\.)?([a-z\d-]*\.[a-z\d-]*)$").unwrap());
 static RE_MANIFEST: Lazy<Regex> = Lazy::new(|| Regex::new("(?m)URI=\"([^\"]+)\"").unwrap());
 static RE_DASH_MANIFEST: Lazy<Regex> = Lazy::new(|| Regex::new("BaseURL>(https://[^<]+)</BaseURL").unwrap());
 
