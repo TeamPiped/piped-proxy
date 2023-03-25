@@ -34,7 +34,7 @@ static RE_DASH_MANIFEST: Lazy<Regex> = Lazy::new(|| Regex::new("BaseURL>(https:/
 
 static CLIENT: Lazy<Client> = Lazy::new(|| {
     let builder = Client::builder()
-        .user_agent("Mozilla/5.0 (Windows NT 10.0; rv:91.0) Gecko/20100101 Firefox/91.0");
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; rv:102.0) Gecko/20100101 Firefox/102.0");
 
     if env::var("IPV4_ONLY").is_ok() {
         builder
