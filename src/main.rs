@@ -4,7 +4,7 @@ use std::error::Error;
 use actix_web::{App, HttpRequest, HttpResponse, HttpResponseBuilder, HttpServer, web};
 use actix_web::http::Method;
 use image::EncodableLayout;
-use lazy_static::lazy_static;
+use once_cell::sync::Lazy;
 use qstring::QString;
 use regex::Regex;
 use reqwest::{Client, Request, Url};
@@ -27,27 +27,24 @@ async fn main() -> std::io::Result<()> {
     }.run().await
 }
 
-lazy_static!(
-    static ref RE_DOMAIN: Regex = Regex::new(r"^(?:[a-z\d\.-]*\.)?((?:[a-z\d-]*)\.(?:[a-z\d-]*))$").unwrap();
-    static ref RE_MANIFEST: Regex = Regex::new("(?m)URI=\"([^\"]+)\"").unwrap();
-    static ref RE_DASH_MANIFEST: Regex = Regex::new("BaseURL>(https://[^<]+)</BaseURL").unwrap();
-);
+static RE_DOMAIN: Lazy<Regex> = Lazy::new(|| Regex::new(r"^(?:[a-z\d.-]*\.)?((?:[a-z\d-]*)\.(?:[a-z\d-]*))$").unwrap());
+static RE_MANIFEST: Lazy<Regex> = Lazy::new(|| Regex::new("(?m)URI=\"([^\"]+)\"").unwrap());
+static RE_DASH_MANIFEST: Lazy<Regex> = Lazy::new(|| Regex::new("BaseURL>(https://[^<]+)</BaseURL").unwrap());
 
-lazy_static!(
-    static ref CLIENT: Client = {
-        let builder = Client::builder()
-            .user_agent("Mozilla/5.0 (Windows NT 10.0; rv:91.0) Gecko/20100101 Firefox/91.0");
 
-        if env::var("IPV4_ONLY").is_ok() {
-            builder
+static CLIENT: Lazy<Client> = Lazy::new(|| {
+    let builder = Client::builder()
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; rv:91.0) Gecko/20100101 Firefox/91.0");
+
+    if env::var("IPV4_ONLY").is_ok() {
+        builder
             .local_address(Some("0.0.0.0".parse().unwrap()))
             .build()
             .unwrap()
-        } else {
-            builder.build().unwrap()
-        }
-    };
-);
+    } else {
+        builder.build().unwrap()
+    }
+});
 
 const ALLOWED_DOMAINS: [&str; 7] = [
     "youtube.com",
