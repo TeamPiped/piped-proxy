@@ -94,6 +94,11 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
     let query = QString::from(req.query_string());
 
     let res = query.get("host");
+    let res = res.map(|s| s.to_string());
+
+    if res.is_none() {
+        return Err("No host provided".into());
+    }
 
     let rewrite = {
         if let Some(rewrite) = query.get("rewrite") {
@@ -103,12 +108,8 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
         }
     };
 
-    if res.is_none() {
-        return Err("No host provided".into());
-    }
-
     let host = res.unwrap();
-    let domain = RE_DOMAIN.captures(host);
+    let domain = RE_DOMAIN.captures(host.as_str());
 
     if domain.is_none() {
         return Err("Invalid host provided".into());
@@ -130,8 +131,7 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
     }
 
     let qs = {
-        let qs = query.clone();
-        let collected = qs.into_pairs()
+        let collected = query.into_pairs()
             .into_iter()
             .filter(|(key, _)| key != "host" && key != "rewrite")
             .collect::<Vec<_>>();
@@ -150,7 +150,7 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
 
     for (key, value) in req.headers() {
         if is_header_allowed(key.as_str()) {
-            request_headers.insert(key.clone(), value.clone());
+            request_headers.insert(key, value.clone());
         }
     }
 
@@ -160,7 +160,7 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
         return Err(resp.err().unwrap().into());
     }
 
-    let resp = resp.unwrap();
+    let resp = resp?;
 
     let mut response = HttpResponse::build(resp.status());
 
@@ -168,7 +168,7 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
 
     for (key, value) in resp.headers() {
         if is_header_allowed(key.as_str()) {
-            response.append_header((key.as_str(), value.to_str().unwrap()));
+            response.append_header((key.as_str(), value.to_str()?));
         }
     }
 
@@ -199,10 +199,10 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
                     if let Some(captures) = captures {
                         let url = captures.get(1).unwrap().as_str();
                         if url.starts_with("https://") {
-                            return line.replace(url, localize_url(url, host).as_str());
+                            return line.replace(url, localize_url(url, host.as_str()).as_str());
                         }
                     }
-                    localize_url(line, host)
+                    localize_url(line, host.as_str())
                 }).collect::<Vec<String>>().join("\n");
 
                 return Ok(response.body(modified));
@@ -213,9 +213,8 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
                 let captures = RE_DASH_MANIFEST.captures_iter(&clone_resp);
                 for capture in captures {
                     let url = capture.get(1).unwrap().as_str();
-                    let new_url = localize_url(url, host);
-                    resp_str = resp_str.replace(url, new_url.as_str())
-                        .clone();
+                    let new_url = localize_url(url, host.as_str());
+                    resp_str = resp_str.replace(url, new_url.as_str());
                 }
                 return Ok(response.body(resp_str));
             }
