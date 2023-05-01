@@ -20,7 +20,6 @@ RUN --mount=type=cache,target=/var/cache/apt \
 WORKDIR /app/
 
 COPY --from=BUILD /app/piped-proxy .
-RUN mkdir -p /app/socket/
 
 EXPOSE 8080
 
