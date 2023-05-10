@@ -12,5 +12,5 @@ once_cell = "1.17.1"
 qstring = "0.7.2"
 regex = "1.8.1"
 reqwest = {version = "0.11.17", features = ["rustls-tls", "stream", "brotli", "gzip"], default-features = false}
-tokio = {version = "1.28.0", features = ["full"]}
+tokio = {version = "1.28.1", features = ["full"]}
 webp = "0.2.2"
