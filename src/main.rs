@@ -4,10 +4,14 @@ use std::error::Error;
 use actix_web::{App, HttpRequest, HttpResponse, HttpResponseBuilder, HttpServer, web};
 use actix_web::http::Method;
 use image::EncodableLayout;
+use mimalloc::MiMalloc;
 use once_cell::sync::Lazy;
 use qstring::QString;
 use regex::Regex;
 use reqwest::{Client, Request, Url};
+
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
