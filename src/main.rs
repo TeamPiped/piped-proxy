@@ -1,14 +1,14 @@
 use std::env;
 use std::error::Error;
 
-use actix_web::{App, HttpRequest, HttpResponse, HttpResponseBuilder, HttpServer, web};
 use actix_web::http::Method;
+use actix_web::{web, App, HttpRequest, HttpResponse, HttpResponseBuilder, HttpServer};
 use image::EncodableLayout;
 use mimalloc::MiMalloc;
 use once_cell::sync::Lazy;
 use qstring::QString;
 use regex::Regex;
-use reqwest::{Client, Request, Url};
+use reqwest::{Body, Client, Request, Url};
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -19,8 +19,7 @@ async fn main() -> std::io::Result<()> {
 
     let server = HttpServer::new(|| {
         // match all requests
-        App::new()
-            .default_service(web::to(index))
+        App::new().default_service(web::to(index))
     });
     // get port from env
     if env::var("UDS").is_ok() {
@@ -28,17 +27,20 @@ async fn main() -> std::io::Result<()> {
     } else {
         let bind = env::var("BIND").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
         server.bind(bind)?
-    }.run().await
+    }
+    .run()
+    .await
 }
 
-static RE_DOMAIN: Lazy<Regex> = Lazy::new(|| Regex::new(r"^(?:[a-z\d.-]*\.)?([a-z\d-]*\.[a-z\d-]*)$").unwrap());
+static RE_DOMAIN: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"^(?:[a-z\d.-]*\.)?([a-z\d-]*\.[a-z\d-]*)$").unwrap());
 static RE_MANIFEST: Lazy<Regex> = Lazy::new(|| Regex::new("(?m)URI=\"([^\"]+)\"").unwrap());
-static RE_DASH_MANIFEST: Lazy<Regex> = Lazy::new(|| Regex::new("BaseURL>(https://[^<]+)</BaseURL").unwrap());
-
+static RE_DASH_MANIFEST: Lazy<Regex> =
+    Lazy::new(|| Regex::new("BaseURL>(https://[^<]+)</BaseURL").unwrap());
 
 static CLIENT: Lazy<Client> = Lazy::new(|| {
     let builder = Client::builder()
-        .user_agent("Mozilla/5.0 (Windows NT 10.0; rv:102.0) Gecko/20100101 Firefox/102.0");
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; rv:113.0) Gecko/20100101 Firefox/113.0");
 
     if env::var("IPV4_ONLY").is_ok() {
         builder
@@ -73,14 +75,17 @@ fn is_header_allowed(header: &str) -> bool {
         return false;
     }
 
-    !matches!(header, "host" |
-        "content-length" |
-        "set-cookie" |
-        "alt-svc" |
-        "accept-ch" |
-        "report-to" |
-        "strict-transport-security" |
-        "user-agent")
+    !matches!(
+        header,
+        "host"
+            | "content-length"
+            | "set-cookie"
+            | "alt-svc"
+            | "accept-ch"
+            | "report-to"
+            | "strict-transport-security"
+            | "user-agent"
+    )
 }
 
 async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
@@ -134,8 +139,12 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
         return Err("Domain not allowed".into());
     }
 
+    let video_playback = req.path().eq("/videoplayback");
+    let is_android = video_playback && query.get("c").unwrap_or("").eq("ANDROID");
+
     let qs = {
-        let collected = query.into_pairs()
+        let collected = query
+            .into_pairs()
             .into_iter()
             .filter(|(key, _)| key != "host" && key != "rewrite")
             .collect::<Vec<_>>();
@@ -145,10 +154,19 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
     let mut url = Url::parse(&format!("https://{}{}", host, req.path()))?;
     url.set_query(Some(qs.to_string().as_str()));
 
-    let mut request = Request::new(
-        req.method().clone(),
-        url,
-    );
+    let method = {
+        if !is_android && video_playback {
+            Method::POST
+        } else {
+            req.method().clone()
+        }
+    };
+
+    let mut request = Request::new(method, url);
+
+    if !is_android && video_playback {
+        request.body_mut().replace(Body::from("x\0"));
+    }
 
     let request_headers = request.headers_mut();
 
@@ -156,6 +174,10 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
         if is_header_allowed(key.as_str()) {
             request_headers.insert(key, value.clone());
         }
+    }
+
+    if is_android {
+        request_headers.insert("User-Agent", "com.google.android.youtube/1537338816 (Linux; U; Android 13; en_US; ; Build/TQ2A.230505.002; Cronet/113.0.5672.24)".parse().unwrap());
     }
 
     let resp = CLIENT.execute(request).await;
@@ -195,19 +217,26 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
 
                 return Ok(response.body(resp_bytes));
             }
-            if content_type == "application/x-mpegurl" || content_type == "application/vnd.apple.mpegurl" {
+            if content_type == "application/x-mpegurl"
+                || content_type == "application/vnd.apple.mpegurl"
+            {
                 let resp_str = resp.text().await.unwrap();
 
-                let modified = resp_str.lines().map(|line| {
-                    let captures = RE_MANIFEST.captures(line);
-                    if let Some(captures) = captures {
-                        let url = captures.get(1).unwrap().as_str();
-                        if url.starts_with("https://") {
-                            return line.replace(url, localize_url(url, host.as_str()).as_str());
+                let modified = resp_str
+                    .lines()
+                    .map(|line| {
+                        let captures = RE_MANIFEST.captures(line);
+                        if let Some(captures) = captures {
+                            let url = captures.get(1).unwrap().as_str();
+                            if url.starts_with("https://") {
+                                return line
+                                    .replace(url, localize_url(url, host.as_str()).as_str());
+                            }
                         }
-                    }
-                    localize_url(line, host.as_str())
-                }).collect::<Vec<String>>().join("\n");
+                        localize_url(line, host.as_str())
+                    })
+                    .collect::<Vec<String>>()
+                    .join("\n");
 
                 return Ok(response.body(modified));
             }
@@ -239,8 +268,7 @@ fn localize_url(url: &str, host: &str) -> String {
         let host = url.host().unwrap().to_string();
 
         // set host query param
-        url.query_pairs_mut()
-            .append_pair("host", &host);
+        url.query_pairs_mut().append_pair("host", &host);
 
         return format!("{}?{}", url.path(), url.query().unwrap());
     } else if url.ends_with(".m3u8") || url.ends_with(".ts") {
