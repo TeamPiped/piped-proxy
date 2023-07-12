@@ -7,8 +7,10 @@ use libwebp_sys::{WebPEncodeRGB, WebPFree};
 use mimalloc::MiMalloc;
 use once_cell::sync::Lazy;
 use qstring::QString;
+use ravif::{Encoder, Img};
 use regex::Regex;
 use reqwest::{Body, Client, Request, Url};
+use rgb::FromSlice;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -117,6 +119,14 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
         }
     };
 
+    let avif = {
+        if let Some(avif) = query.get("avif") {
+            avif == "true"
+        } else {
+            false
+        }
+    };
+
     let host = res.unwrap();
     let domain = RE_DOMAIN.captures(host.as_str());
 
@@ -200,6 +210,31 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
 
     if rewrite {
         if let Some(content_type) = resp.headers().get("content-type") {
+            if content_type == "image/webp" || content_type == "image/jpeg" && avif {
+                let resp_bytes = resp.bytes().await.unwrap();
+
+                let image = image::load_from_memory(&resp_bytes).unwrap();
+
+                let buffer = Img::new(
+                    image.as_rgb8().unwrap().as_raw().as_rgb(),
+                    image.width() as usize,
+                    image.height() as usize,
+                );
+
+                let res = Encoder::new()
+                    .with_quality(80f32)
+                    .with_speed(4)
+                    .encode_rgb(buffer);
+
+                return if let Ok(res) = res {
+                    response.content_type("image/avif");
+                    Ok(response.body(res.avif_file.to_vec()))
+                } else {
+                    response.content_type("image/jpeg");
+                    Ok(response.body(resp_bytes))
+                };
+            }
+
             if content_type == "image/jpeg" {
                 let resp_bytes = resp.bytes().await.unwrap();
 
@@ -214,7 +249,14 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
                 let bytes: Vec<u8> = unsafe {
                     let mut out_buf = std::ptr::null_mut();
                     let stride = width as i32 * 3;
-                    let len: usize = WebPEncodeRGB(data.as_ptr(), width as i32, height as i32, stride, quality as f32, &mut out_buf);
+                    let len: usize = WebPEncodeRGB(
+                        data.as_ptr(),
+                        width as i32,
+                        height as i32,
+                        stride,
+                        quality as f32,
+                        &mut out_buf,
+                    );
                     let vec = std::slice::from_raw_parts(out_buf, len).into();
                     WebPFree(out_buf as *mut _);
                     vec
