@@ -229,7 +229,7 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
 
                 let res = Encoder::new()
                     .with_quality(80f32)
-                    .with_speed(4)
+                    .with_speed(7)
                     .encode_rgb(buffer);
 
                 return if let Ok(res) = res {
