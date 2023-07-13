@@ -1,16 +1,14 @@
 use std::env;
 use std::error::Error;
 
-use actix_web::{App, HttpRequest, HttpResponse, HttpResponseBuilder, HttpServer, web};
 use actix_web::http::Method;
+use actix_web::{web, App, HttpRequest, HttpResponse, HttpResponseBuilder, HttpServer};
 use libwebp_sys::{WebPEncodeRGB, WebPFree};
 use mimalloc::MiMalloc;
 use once_cell::sync::Lazy;
 use qstring::QString;
-use ravif::{Encoder, Img};
 use regex::Regex;
 use reqwest::{Body, Client, Request, Url};
-use rgb::FromSlice;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -30,8 +28,8 @@ async fn main() -> std::io::Result<()> {
         let bind = env::var("BIND").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
         server.bind(bind)?
     }
-        .run()
-        .await
+    .run()
+    .await
 }
 
 static RE_DOMAIN: Lazy<Regex> =
@@ -119,6 +117,7 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
         }
     };
 
+    #[cfg(feature = "avif")]
     let avif = {
         if let Some(avif) = query.get("avif") {
             avif == "true"
@@ -210,7 +209,11 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
 
     if rewrite {
         if let Some(content_type) = resp.headers().get("content-type") {
+            #[cfg(feature = "avif")]
             if content_type == "image/webp" || content_type == "image/jpeg" && avif {
+                use ravif::{Encoder, Img};
+                use rgb::FromSlice;
+
                 let resp_bytes = resp.bytes().await.unwrap();
 
                 let image = image::load_from_memory(&resp_bytes).unwrap();
@@ -221,11 +224,7 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
                 let buf = image.into_rgb8();
                 let buf = buf.as_raw().as_rgb();
 
-                let buffer = Img::new(
-                    buf,
-                    width,
-                    height,
-                );
+                let buffer = Img::new(buf, width, height);
 
                 let res = Encoder::new()
                     .with_quality(80f32)
