@@ -4,7 +4,7 @@ WORKDIR /app/
 
 COPY . .
 
-RUN --mount=type=chache,target=/var/cache/apt \
+RUN --mount=type=cache,target=/var/cache/apt \
     apt-get update && \
     apt-get install -y --no-install-recommends \
     nasm && \
