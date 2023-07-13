@@ -215,10 +215,16 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
 
                 let image = image::load_from_memory(&resp_bytes).unwrap();
 
+                let width = image.width() as usize;
+                let height = image.height() as usize;
+
+                let buf = image.into_rgb8();
+                let buf = buf.as_raw().as_rgb();
+
                 let buffer = Img::new(
-                    image.as_rgb8().unwrap().as_raw().as_rgb(),
-                    image.width() as usize,
-                    image.height() as usize,
+                    buf,
+                    width,
+                    height,
                 );
 
                 let res = Encoder::new()
