@@ -52,7 +52,7 @@ static CLIENT: Lazy<Client> = Lazy::new(|| {
     }
 });
 
-const ALLOWED_DOMAINS: [&str; 7] = [
+const ALLOWED_DOMAINS: [&str; 8] = [
     "youtube.com",
     "googlevideo.com",
     "ytimg.com",
@@ -60,6 +60,7 @@ const ALLOWED_DOMAINS: [&str; 7] = [
     "googleusercontent.com",
     "lbryplayer.xyz",
     "odycdn.com",
+    "ajay.app",
 ];
 
 fn add_headers(response: &mut HttpResponseBuilder) {
