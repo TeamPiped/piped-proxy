@@ -204,7 +204,7 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
 
     for (key, value) in resp.headers() {
         if is_header_allowed(key.as_str()) {
-            response.append_header((key.as_str(), value.to_str()?));
+            response.append_header((key.as_str(), value.as_bytes()));
         }
     }
 
