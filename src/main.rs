@@ -52,6 +52,7 @@ static CLIENT: Lazy<Client> = Lazy::new(|| {
     }
 });
 
+const ANDROID_USER_AGENT: &str = "com.google.android.youtube/1537338816 (Linux; U; Android 13; en_US; ; Build/TQ2A.230505.002; Cronet/113.0.5672.24)";
 const ALLOWED_DOMAINS: [&str; 8] = [
     "youtube.com",
     "googlevideo.com",
@@ -110,22 +111,10 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
         return Err("No host provided".into());
     }
 
-    let rewrite = {
-        if let Some(rewrite) = query.get("rewrite") {
-            rewrite == "true"
-        } else {
-            true
-        }
-    };
+    let rewrite = query.get("rewrite") != Some("false");
 
     #[cfg(feature = "avif")]
-    let avif = {
-        if let Some(avif) = query.get("avif") {
-            avif == "true"
-        } else {
-            false
-        }
-    };
+    let avif = query.get("avif") == Some("true");
 
     let host = res.unwrap();
     let domain = RE_DOMAIN.captures(host.as_str());
@@ -136,16 +125,7 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
 
     let domain = domain.unwrap().get(1).unwrap().as_str();
 
-    let mut allowed = false;
-
-    for allowed_domain in ALLOWED_DOMAINS.iter() {
-        if &domain == allowed_domain {
-            allowed = true;
-            break;
-        }
-    }
-
-    if !allowed {
+    if !ALLOWED_DOMAINS.contains(&domain) {
         return Err("Domain not allowed".into());
     }
 
@@ -187,7 +167,7 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
     }
 
     if is_android {
-        request_headers.insert("User-Agent", "com.google.android.youtube/1537338816 (Linux; U; Android 13; en_US; ; Build/TQ2A.230505.002; Cronet/113.0.5672.24)".parse().unwrap());
+        request_headers.insert("User-Agent", ANDROID_USER_AGENT.parse().unwrap());
     }
 
     let resp = CLIENT.execute(request).await;
