@@ -1,9 +1,8 @@
 use std::env;
 use std::error::Error;
 
+use actix_web::{App, HttpRequest, HttpResponse, HttpResponseBuilder, HttpServer, web};
 use actix_web::http::Method;
-use actix_web::{web, App, HttpRequest, HttpResponse, HttpResponseBuilder, HttpServer};
-use libwebp_sys::{WebPEncodeRGB, WebPFree};
 use mimalloc::MiMalloc;
 use once_cell::sync::Lazy;
 use qstring::QString;
@@ -28,8 +27,8 @@ async fn main() -> std::io::Result<()> {
         let bind = env::var("BIND").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
         server.bind(bind)?
     }
-    .run()
-    .await
+        .run()
+        .await
 }
 
 static RE_DOMAIN: Lazy<Regex> =
@@ -221,7 +220,10 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
                 };
             }
 
+            #[cfg(feature = "webp")]
             if content_type == "image/jpeg" {
+                use libwebp_sys::{WebPEncodeRGB, WebPFree};
+
                 let resp_bytes = resp.bytes().await.unwrap();
 
                 let image = image::load_from_memory(&resp_bytes).unwrap();
@@ -256,6 +258,7 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
                 response.content_type("image/jpeg");
                 return Ok(response.body(resp_bytes));
             }
+
             if content_type == "application/x-mpegurl"
                 || content_type == "application/vnd.apple.mpegurl"
             {
