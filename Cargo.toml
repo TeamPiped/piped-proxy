@@ -16,7 +16,7 @@ ravif = { version = "0.11.2", optional = true }
 rgb = { version = "0.8.36", optional = true }
 regex = "1.9.3"
 reqwest = { version = "0.11.18", features = ["rustls-tls", "stream", "brotli", "gzip"], default-features = false }
-tokio = { version = "1.29.1", features = ["full"] }
+tokio = { version = "1.30.0", features = ["full"] }
 
 [features]
 default = ["webp"]
