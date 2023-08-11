@@ -22,3 +22,6 @@ tokio = { version = "1.30.0", features = ["full"] }
 default = ["webp"]
 avif = ["dep:ravif", "dep:rgb"]
 webp = ["dep:libwebp-sys"]
+
+[profile.release]
+lto = true
