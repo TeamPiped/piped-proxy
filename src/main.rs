@@ -1,8 +1,8 @@
 use std::env;
 use std::error::Error;
 
-use actix_web::{App, HttpRequest, HttpResponse, HttpResponseBuilder, HttpServer, web};
 use actix_web::http::Method;
+use actix_web::{web, App, HttpRequest, HttpResponse, HttpResponseBuilder, HttpServer};
 use mimalloc::MiMalloc;
 use once_cell::sync::Lazy;
 use qstring::QString;
@@ -27,8 +27,8 @@ async fn main() -> std::io::Result<()> {
         let bind = env::var("BIND").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
         server.bind(bind)?
     }
-        .run()
-        .await
+    .run()
+    .await
 }
 
 static RE_DOMAIN: Lazy<Regex> =
@@ -40,6 +40,26 @@ static RE_DASH_MANIFEST: Lazy<Regex> =
 static CLIENT: Lazy<Client> = Lazy::new(|| {
     let builder = Client::builder()
         .user_agent("Mozilla/5.0 (Windows NT 10.0; rv:102.0) Gecko/20100101 Firefox/102.0");
+
+    let proxy = if let Ok(proxy) = env::var("PROXY") {
+        Some(reqwest::Proxy::all(proxy).unwrap())
+    } else {
+        None
+    };
+
+    if proxy.is_some() {
+        // proxy basic auth
+        let builder = if let Ok(proxy_auth_user) = env::var("PROXY_USER") {
+            let proxy_auth_pass = env::var("PROXY_PASS").unwrap_or_default();
+            builder.proxy(
+                proxy
+                    .unwrap()
+                    .basic_auth(&proxy_auth_user, &proxy_auth_pass),
+            )
+        } else {
+            builder.proxy(proxy.unwrap())
+        };
+    }
 
     if env::var("IPV4_ONLY").is_ok() {
         builder
