@@ -47,9 +47,9 @@ static CLIENT: Lazy<Client> = Lazy::new(|| {
         None
     };
 
-    if proxy.is_some() {
+    let builder = if proxy.is_some() {
         // proxy basic auth
-        let builder = if let Ok(proxy_auth_user) = env::var("PROXY_USER") {
+        if let Ok(proxy_auth_user) = env::var("PROXY_USER") {
             let proxy_auth_pass = env::var("PROXY_PASS").unwrap_or_default();
             builder.proxy(
                 proxy
@@ -58,8 +58,10 @@ static CLIENT: Lazy<Client> = Lazy::new(|| {
             )
         } else {
             builder.proxy(proxy.unwrap())
-        };
-    }
+        }
+    } else {
+        builder
+    };
 
     if env::var("IPV4_ONLY").is_ok() {
         builder
