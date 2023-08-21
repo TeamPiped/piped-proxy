@@ -15,7 +15,7 @@ qstring = "0.7.2"
 ravif = { version = "0.11.2", optional = true }
 rgb = { version = "0.8.36", optional = true }
 regex = "1.9.3"
-reqwest = { version = "0.11.18", features = ["rustls-tls", "stream", "brotli", "gzip"], default-features = false }
+reqwest = { version = "0.11.19", features = ["rustls-tls", "stream", "brotli", "gzip"], default-features = false }
 tokio = { version = "1.32.0", features = ["full"] }
 
 [features]
