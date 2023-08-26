@@ -14,7 +14,7 @@ once_cell = "1.18.0"
 qstring = "0.7.2"
 ravif = { version = "0.11.2", optional = true }
 rgb = { version = "0.8.36", optional = true }
-regex = "1.9.3"
+regex = "1.9.4"
 reqwest = { version = "0.11.20", features = ["rustls-tls", "stream", "brotli", "gzip", "socks"], default-features = false }
 tokio = { version = "1.32.0", features = ["full"] }
 
