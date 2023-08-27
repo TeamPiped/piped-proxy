@@ -20,8 +20,8 @@ jobs:
       - name: Set up NASM
         uses: ilammy/setup-nasm@v1.4.0
       - name: Build
-        run: cargo build --release
-      - run: mv target/release/piped-proxy piped-proxy
+        run: RUSTFLAGS='-C target-feature=+crt-static' cargo build --release --target x86_64-unknown-linux-gnu
+      - run: mv target/x86_64-unknown-linux-gnu/release/piped-proxy piped-proxy
       - name: Upload artifact
         uses: actions/upload-artifact@v3
         with:
