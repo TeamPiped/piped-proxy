@@ -20,3 +20,9 @@ jobs:
         uses: ilammy/setup-nasm@v1.4.0
       - name: Build
         run: cargo build --release
+      - run: mv target/release/piped-proxy piped-proxy
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: piped-proxy
+          path: piped-proxy
