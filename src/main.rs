@@ -1,6 +1,3 @@
-use std::env;
-use std::error::Error;
-
 use actix_web::http::Method;
 use actix_web::{web, App, HttpRequest, HttpResponse, HttpResponseBuilder, HttpServer};
 use mimalloc::MiMalloc;
@@ -8,6 +5,10 @@ use once_cell::sync::Lazy;
 use qstring::QString;
 use regex::Regex;
 use reqwest::{Body, Client, Request, Url};
+use std::env;
+use std::error::Error;
+use tokio::sync::oneshot;
+use tokio::task::spawn_blocking;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -213,72 +214,79 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
         if let Some(content_type) = resp.headers().get("content-type") {
             #[cfg(feature = "avif")]
             if content_type == "image/webp" || content_type == "image/jpeg" && avif {
-                use ravif::{Encoder, Img};
-                use rgb::FromSlice;
-
                 let resp_bytes = resp.bytes().await.unwrap();
+                let (tx, rx) = oneshot::channel::<(Vec<u8>, &'static str)>();
+                spawn_blocking(|| {
+                    use ravif::{Encoder, Img};
+                    use rgb::FromSlice;
 
-                let image = image::load_from_memory(&resp_bytes).unwrap();
+                    let image = image::load_from_memory(&resp_bytes).unwrap();
 
-                let width = image.width() as usize;
-                let height = image.height() as usize;
+                    let width = image.width() as usize;
+                    let height = image.height() as usize;
 
-                let buf = image.into_rgb8();
-                let buf = buf.as_raw().as_rgb();
+                    let buf = image.into_rgb8();
+                    let buf = buf.as_raw().as_rgb();
 
-                let buffer = Img::new(buf, width, height);
+                    let buffer = Img::new(buf, width, height);
 
-                let res = Encoder::new()
-                    .with_quality(80f32)
-                    .with_speed(7)
-                    .encode_rgb(buffer);
+                    let res = Encoder::new()
+                        .with_quality(80f32)
+                        .with_speed(7)
+                        .encode_rgb(buffer);
 
-                return if let Ok(res) = res {
-                    response.content_type("image/avif");
-                    Ok(response.body(res.avif_file.to_vec()))
-                } else {
-                    response.content_type("image/jpeg");
-                    Ok(response.body(resp_bytes))
-                };
+                    return if let Ok(res) = res {
+                        tx.send((res.avif_file.to_vec(), "image/avif")).unwrap();
+                    } else {
+                        tx.send((resp_bytes.into(), "image/jpeg")).unwrap();
+                    };
+                });
+                let (body, content_type) = rx.await.unwrap();
+                response.content_type(content_type);
+                return Ok(response.body(body));
             }
 
             #[cfg(feature = "webp")]
             if content_type == "image/jpeg" {
-                use libwebp_sys::{WebPEncodeRGB, WebPFree};
-
                 let resp_bytes = resp.bytes().await.unwrap();
+                let (tx, rx) = oneshot::channel::<(Vec<u8>, &'static str)>();
+                spawn_blocking(|| {
+                    use libwebp_sys::{WebPEncodeRGB, WebPFree};
 
-                let image = image::load_from_memory(&resp_bytes).unwrap();
-                let width = image.width();
-                let height = image.height();
+                    let image = image::load_from_memory(&resp_bytes).unwrap();
+                    let width = image.width();
+                    let height = image.height();
 
-                let quality = 85;
+                    let quality = 85;
 
-                let data = image.as_rgb8().unwrap().as_raw();
+                    let data = image.as_rgb8().unwrap().as_raw();
 
-                let bytes: Vec<u8> = unsafe {
-                    let mut out_buf = std::ptr::null_mut();
-                    let stride = width as i32 * 3;
-                    let len: usize = WebPEncodeRGB(
-                        data.as_ptr(),
-                        width as i32,
-                        height as i32,
-                        stride,
-                        quality as f32,
-                        &mut out_buf,
-                    );
-                    let vec = std::slice::from_raw_parts(out_buf, len).into();
-                    WebPFree(out_buf as *mut _);
-                    vec
-                };
+                    let bytes: Vec<u8> = unsafe {
+                        let mut out_buf = std::ptr::null_mut();
+                        let stride = width as i32 * 3;
+                        let len: usize = WebPEncodeRGB(
+                            data.as_ptr(),
+                            width as i32,
+                            height as i32,
+                            stride,
+                            quality as f32,
+                            &mut out_buf,
+                        );
+                        let vec = std::slice::from_raw_parts(out_buf, len).into();
+                        WebPFree(out_buf as *mut _);
+                        vec
+                    };
 
-                if bytes.len() < resp_bytes.len() {
-                    response.content_type("image/webp");
-                    return Ok(response.body(bytes));
-                }
+                    if bytes.len() < resp_bytes.len() {
+                        tx.send((bytes, "image/webp")).unwrap();
+                        return;
+                    }
 
-                response.content_type("image/jpeg");
-                return Ok(response.body(resp_bytes));
+                    tx.send((resp_bytes.into(), "image/jpeg")).unwrap();
+                });
+                let (body, content_type) = rx.await.unwrap();
+                response.content_type(content_type);
+                return Ok(response.body(body));
             }
 
             if content_type == "application/x-mpegurl"
