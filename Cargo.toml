@@ -16,7 +16,7 @@ qstring = "0.7.2"
 mimalloc = { version = "0.1.39", optional = true }
 
 # Transcoding Images to WebP/AVIF to save bandwidth
-image = { version = "0.24.7", optional = true }
+image = { version = "0.24.7", features = ["jpeg", "jpeg_rayon", "webp"], default-features = false, optional = true }
 libwebp-sys = { version = "0.9.4", optional = true }
 ravif = { version = "0.11.3", optional = true }
 rgb = { version = "0.8.36", optional = true }
