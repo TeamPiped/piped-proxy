@@ -25,9 +25,12 @@ async fn main() -> std::io::Result<()> {
         // match all requests
         App::new().default_service(web::to(index))
     });
-    // get port from env
-    if let Ok(unix_socket) = env::var("BIND_UNIX") {
-        server.bind_uds(unix_socket)?
+
+    // get socket/port from env
+    // backwards compat when only UDS is set
+    let socket_path = env::var("BIND_UNIX").unwrap_or_else(|_| "./socket/actix.sock".to_string());
+    if env::var("UDS").is_ok() {
+        server.bind_uds(socket_path)?
     } else {
         let bind = env::var("BIND").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
         server.bind(bind)?
