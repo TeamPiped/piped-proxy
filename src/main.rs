@@ -322,7 +322,8 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
             }
             if content_type == "video/vnd.mpeg.dash.mpd" || content_type == "application/dash+xml" {
                 let mut resp_str = resp.text().await.unwrap();
-                let captures = RE_DASH_MANIFEST.captures_iter(&resp_str);
+                let clone_resp = resp_str.clone();
+                let captures = RE_DASH_MANIFEST.captures_iter(&clone_resp);
                 for capture in captures {
                     let url = capture.get(1).unwrap().as_str();
                     let new_url = localize_url(url, host.as_str());
@@ -351,7 +352,7 @@ fn localize_url(url: &str, host: &str) -> String {
 
         return format!("{}?{}", url.path(), url.query().unwrap());
     } else if url.ends_with(".m3u8") || url.ends_with(".ts") {
-        format!("{}{}host={}", url, if url.contains('?') { "&" } else { "?" }, host)
+        return format!("{}{}host={}", url, if url.contains('?') { "&" } else { "?" }, host);
     }
 
     url.to_string()
