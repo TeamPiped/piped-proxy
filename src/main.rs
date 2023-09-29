@@ -1,17 +1,21 @@
 use actix_web::http::Method;
 use actix_web::{web, App, HttpRequest, HttpResponse, HttpResponseBuilder, HttpServer};
-use mimalloc::MiMalloc;
 use once_cell::sync::Lazy;
 use qstring::QString;
 use regex::Regex;
 use reqwest::{Body, Client, Request, Url};
 use std::env;
 use std::error::Error;
-use tokio::sync::oneshot;
-use tokio::task::spawn_blocking;
 
+#[cfg(not(any(feature = "reqwest-native-tls", feature = "reqwest-rustls")))]
+compile_error!("feature \"reqwest-native-tls\" or \"reqwest-rustls\" must be set for proxy to have TLS support");
+
+#[cfg(any(feature = "webp", feature = "avif"))]
+use tokio::{sync::oneshot, task::spawn_blocking};
+
+#[cfg(feature = "mimalloc")]
 #[global_allocator]
-static GLOBAL: MiMalloc = MiMalloc;
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -21,9 +25,12 @@ async fn main() -> std::io::Result<()> {
         // match all requests
         App::new().default_service(web::to(index))
     });
-    // get port from env
+
+    // get socket/port from env
+    // backwards compat when only UDS is set
     if env::var("UDS").is_ok() {
-        server.bind_uds("./socket/actix.sock")?
+        let socket_path = env::var("BIND_UNIX").unwrap_or_else(|_| "./socket/actix.sock".to_string());
+        server.bind_uds(socket_path)?
     } else {
         let bind = env::var("BIND").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
         server.bind(bind)?
@@ -48,17 +55,13 @@ static CLIENT: Lazy<Client> = Lazy::new(|| {
         None
     };
 
-    let builder = if proxy.is_some() {
+    let builder = if let Some(proxy) = proxy {
         // proxy basic auth
         if let Ok(proxy_auth_user) = env::var("PROXY_USER") {
             let proxy_auth_pass = env::var("PROXY_PASS").unwrap_or_default();
-            builder.proxy(
-                proxy
-                    .unwrap()
-                    .basic_auth(&proxy_auth_user, &proxy_auth_pass),
-            )
+            builder.proxy(proxy.basic_auth(&proxy_auth_user, &proxy_auth_pass))
         } else {
-            builder.proxy(proxy.unwrap())
+            builder.proxy(proxy)
         }
     } else {
         builder
@@ -132,6 +135,9 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
     if res.is_none() {
         return Err("No host provided".into());
     }
+
+    #[cfg(any(feature = "webp", feature = "avif"))]
+    let disallow_image_transcoding = env::var("DISALLOW_IMAGE_TRANSCODING").is_ok();
 
     let rewrite = query.get("rewrite") != Some("false");
 
@@ -213,7 +219,9 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
     if rewrite {
         if let Some(content_type) = resp.headers().get("content-type") {
             #[cfg(feature = "avif")]
-            if content_type == "image/webp" || content_type == "image/jpeg" && avif {
+            if !disallow_image_transcoding
+                && (content_type == "image/webp" || content_type == "image/jpeg" && avif)
+            {
                 let resp_bytes = resp.bytes().await.unwrap();
                 let (tx, rx) = oneshot::channel::<(Vec<u8>, &'static str)>();
                 spawn_blocking(|| {
@@ -235,11 +243,11 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
                         .with_speed(7)
                         .encode_rgb(buffer);
 
-                    return if let Ok(res) = res {
+                    if let Ok(res) = res {
                         tx.send((res.avif_file.to_vec(), "image/avif")).unwrap();
                     } else {
                         tx.send((resp_bytes.into(), "image/jpeg")).unwrap();
-                    };
+                    }
                 });
                 let (body, content_type) = rx.await.unwrap();
                 response.content_type(content_type);
@@ -247,7 +255,7 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
             }
 
             #[cfg(feature = "webp")]
-            if content_type == "image/jpeg" {
+            if !disallow_image_transcoding && content_type == "image/jpeg" {
                 let resp_bytes = resp.bytes().await.unwrap();
                 let (tx, rx) = oneshot::channel::<(Vec<u8>, &'static str)>();
                 spawn_blocking(|| {

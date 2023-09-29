@@ -6,22 +6,34 @@ version = "0.1.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+# Web Requests & Async Runtime
+tokio = { version = "1.32.0", features = ["full"] }
 actix-web = "4.4.0"
-image = "0.24.7"
-libwebp-sys = { version = "0.9.4", optional = true }
-mimalloc = "0.1.39"
-once_cell = "1.18.0"
+reqwest = { version = "0.11.20", features = ["stream", "brotli", "gzip", "socks"], default-features = false }
 qstring = "0.7.2"
+
+# Alternate Allocator 
+mimalloc = { version = "0.1.39", optional = true }
+
+# Transcoding Images to WebP/AVIF to save bandwidth
+image = { version = "0.24.7", features = ["jpeg", "jpeg_rayon", "webp"], default-features = false, optional = true }
+libwebp-sys = { version = "0.9.4", optional = true }
 ravif = { version = "0.11.3", optional = true }
 rgb = { version = "0.8.36", optional = true }
+
+once_cell = "1.18.0"
 regex = "1.9.5"
-reqwest = { version = "0.11.20", features = ["rustls-tls", "stream", "brotli", "gzip", "socks"], default-features = false }
-tokio = { version = "1.32.0", features = ["full"] }
 
 [features]
-default = ["webp"]
-avif = ["dep:ravif", "dep:rgb"]
-webp = ["dep:libwebp-sys"]
+default = ["webp", "mimalloc", "reqwest-rustls"]
+
+reqwest-rustls = ["reqwest/rustls-tls"]
+reqwest-native-tls = ["reqwest/default-tls"]
+
+avif = ["dep:ravif", "dep:rgb", "dep:image"]
+webp = ["dep:libwebp-sys", "dep:image"]
+
+mimalloc = ["dep:mimalloc"]
 
 [profile.release]
 lto = true
