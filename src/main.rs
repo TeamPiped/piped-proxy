@@ -219,7 +219,7 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
     if rewrite {
         if let Some(content_type) = resp.headers().get("content-type") {
             #[cfg(feature = "avif")]
-            if disallow_image_transcoding
+            if !disallow_image_transcoding
                 && (content_type == "image/webp" || content_type == "image/jpeg" && avif)
             {
                 let resp_bytes = resp.bytes().await.unwrap();
