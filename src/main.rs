@@ -28,8 +28,8 @@ async fn main() -> std::io::Result<()> {
 
     // get socket/port from env
     // backwards compat when only UDS is set
-    let socket_path = env::var("BIND_UNIX").unwrap_or_else(|_| "./socket/actix.sock".to_string());
     if env::var("UDS").is_ok() {
+        let socket_path = env::var("BIND_UNIX").unwrap_or_else(|_| "./socket/actix.sock".to_string());
         server.bind_uds(socket_path)?
     } else {
         let bind = env::var("BIND").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
