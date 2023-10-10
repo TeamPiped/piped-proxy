@@ -29,7 +29,8 @@ async fn main() -> std::io::Result<()> {
     // get socket/port from env
     // backwards compat when only UDS is set
     if env::var("UDS").is_ok() {
-        let socket_path = env::var("BIND_UNIX").unwrap_or_else(|_| "./socket/actix.sock".to_string());
+        let socket_path =
+            env::var("BIND_UNIX").unwrap_or_else(|_| "./socket/actix.sock".to_string());
         server.bind_uds(socket_path)?
     } else {
         let bind = env::var("BIND").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
@@ -321,13 +322,13 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
                 return Ok(response.body(modified));
             }
             if content_type == "video/vnd.mpeg.dash.mpd" || content_type == "application/dash+xml" {
-                let mut resp_str = resp.text().await.unwrap();
-                let clone_resp = resp_str.clone();
-                let captures = RE_DASH_MANIFEST.captures_iter(&clone_resp);
+                let resp_str = resp.text().await.unwrap();
+                let mut new_resp = resp_str.clone();
+                let captures = RE_DASH_MANIFEST.captures_iter(&resp_str);
                 for capture in captures {
                     let url = capture.get(1).unwrap().as_str();
                     let new_url = localize_url(url, host.as_str());
-                    resp_str = resp_str.replace(url, new_url.as_str());
+                    new_resp = new_resp.replace(url, new_url.as_str());
                 }
                 return Ok(response.body(resp_str));
             }
@@ -352,7 +353,12 @@ fn localize_url(url: &str, host: &str) -> String {
 
         return format!("{}?{}", url.path(), url.query().unwrap());
     } else if url.ends_with(".m3u8") || url.ends_with(".ts") {
-        return format!("{}{}host={}", url, if url.contains('?') { "&" } else { "?" }, host);
+        return format!(
+            "{}{}host={}",
+            url,
+            if url.contains('?') { "&" } else { "?" },
+            host
+        );
     }
 
     url.to_string()
