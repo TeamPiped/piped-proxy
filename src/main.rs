@@ -28,7 +28,7 @@ async fn main() -> std::io::Result<()> {
 
     // get socket/port from env
     // backwards compat when only UDS is set
-    if env::var("UDS").is_ok() {
+    if get_env_bool("UDS") {
         let socket_path =
             env::var("BIND_UNIX").unwrap_or_else(|_| "./socket/actix.sock".to_string());
         server.bind_uds(socket_path)?
@@ -68,7 +68,7 @@ static CLIENT: Lazy<Client> = Lazy::new(|| {
         builder
     };
 
-    if env::var("IPV4_ONLY").is_ok() {
+    if get_env_bool("IPV4_ONLY") {
         builder
             .local_address(Some("0.0.0.0".parse().unwrap()))
             .build()
@@ -116,6 +116,13 @@ fn is_header_allowed(header: &str) -> bool {
     )
 }
 
+fn get_env_bool(key: &str) -> bool {
+    match env::var(key) {
+        Ok(val) => val.to_lowercase() == "true" || val == "1",
+        Err(_) => false,
+    }
+}
+
 async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
     if req.method() == Method::OPTIONS {
         let mut response = HttpResponse::Ok();
@@ -138,7 +145,7 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
     }
 
     #[cfg(any(feature = "webp", feature = "avif"))]
-    let disallow_image_transcoding = env::var("DISALLOW_IMAGE_TRANSCODING").is_ok();
+    let disallow_image_transcoding = get_env_bool("DISALLOW_IMAGE_TRANSCODING");
 
     let rewrite = query.get("rewrite") != Some("false");
 
