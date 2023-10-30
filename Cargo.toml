@@ -35,5 +35,7 @@ webp = ["dep:libwebp-sys", "dep:image"]
 
 mimalloc = ["dep:mimalloc"]
 
+optimized = ["libwebp-sys?/sse41", "libwebp-sys?/avx2", "libwebp-sys?/neon"]
+
 [profile.release]
 lto = true
