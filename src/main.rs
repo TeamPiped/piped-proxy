@@ -137,6 +137,53 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
     // parse query string
     let query = QString::from(req.query_string());
 
+    #[cfg(feature = "qhash")]
+    {
+        use std::collections::BTreeSet;
+
+        let secret = env::var("HASH_SECRET");
+        if let Ok(secret) = secret {
+            let qhash = query.get("qhash");
+
+            if qhash.is_none() {
+                return Err("No qhash provided".into());
+            }
+
+            let qhash = qhash.unwrap();
+
+            // check that qhash is valid
+            if qhash.len() != 8 {
+                return Err("Invalid qhash provided".into());
+            }
+
+            // store sorted key-value pairs
+            let mut set = BTreeSet::new();
+
+            query.to_pairs().iter().for_each(|(key, value)| {
+                if matches!(*key, "qhash" | "range" | "rewrite") {
+                    return;
+                }
+                set.insert((key.as_bytes(), value.as_bytes()));
+            });
+
+            let mut hasher = blake3::Hasher::new();
+
+            for (key, value) in set {
+                hasher.update(key);
+                hasher.update(value);
+            }
+
+            hasher.update(secret.as_bytes());
+
+            let hash = hasher.finalize().to_hex();
+            let hash = &hash[..8];
+
+            if hash != qhash {
+                return Err("Invalid qhash provided".into());
+            }
+        }
+    }
+
     let res = query.get("host");
     let res = res.map(|s| s.to_string());
 
