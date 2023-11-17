@@ -151,32 +151,39 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
 
             let qhash = qhash.unwrap();
 
-            // check that qhash is valid
             if qhash.len() != 8 {
                 return Err("Invalid qhash provided".into());
             }
 
-            // store sorted key-value pairs
+            // Store sorted key-value pairs
             let mut set = BTreeSet::new();
-
-            query.to_pairs().iter().for_each(|(key, value)| {
-                if matches!(*key, "qhash" | "range" | "rewrite") {
-                    return;
+            {
+                let pairs = query.to_pairs();
+                for (key, value) in &pairs {
+                    if matches!(*key, "qhash" | "range" | "rewrite") {
+                        continue;
+                    }
+                    set.insert((key.as_bytes().to_owned(), value.as_bytes().to_owned()));
                 }
-                set.insert((key.as_bytes(), value.as_bytes()));
-            });
-
-            let mut hasher = blake3::Hasher::new();
-
-            for (key, value) in set {
-                hasher.update(key);
-                hasher.update(value);
             }
 
-            hasher.update(secret.as_bytes());
+            let (tx, rx) = oneshot::channel::<String>();
+            spawn_blocking(move || {
+                let mut hasher = blake3::Hasher::new();
 
-            let hash = hasher.finalize().to_hex();
-            let hash = &hash[..8];
+                for (key, value) in set {
+                    hasher.update(&key);
+                    hasher.update(&value);
+                }
+
+                hasher.update(secret.as_bytes());
+
+                let hash = hasher.finalize().to_hex();
+                let hash = hash[..8].to_owned();
+                tx.send(hash).unwrap();
+            });
+
+            let hash = rx.await.unwrap();
 
             if hash != qhash {
                 return Err("Invalid qhash provided".into());
