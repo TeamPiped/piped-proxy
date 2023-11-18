@@ -11,7 +11,7 @@ use std::error::Error;
 compile_error!("feature \"reqwest-native-tls\" or \"reqwest-rustls\" must be set for proxy to have TLS support");
 
 #[cfg(any(feature = "webp", feature = "avif"))]
-use tokio::{sync::oneshot, task::spawn_blocking};
+use tokio::task::spawn_blocking;
 
 #[cfg(feature = "mimalloc")]
 #[global_allocator]
@@ -231,8 +231,7 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
                 && (content_type == "image/webp" || content_type == "image/jpeg" && avif)
             {
                 let resp_bytes = resp.bytes().await.unwrap();
-                let (tx, rx) = oneshot::channel::<(Vec<u8>, &'static str)>();
-                spawn_blocking(|| {
+                let (body, content_type) = spawn_blocking(|| {
                     use ravif::{Encoder, Img};
                     use rgb::FromSlice;
 
@@ -252,12 +251,11 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
                         .encode_rgb(buffer);
 
                     if let Ok(res) = res {
-                        tx.send((res.avif_file.to_vec(), "image/avif")).unwrap();
+                        (res.avif_file.to_vec(), "image/avif")
                     } else {
-                        tx.send((resp_bytes.into(), "image/jpeg")).unwrap();
+                        (resp_bytes.into(), "image/jpeg")
                     }
-                });
-                let (body, content_type) = rx.await.unwrap();
+                }).await.unwrap();
                 response.content_type(content_type);
                 return Ok(response.body(body));
             }
@@ -265,8 +263,7 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
             #[cfg(feature = "webp")]
             if !disallow_image_transcoding && content_type == "image/jpeg" {
                 let resp_bytes = resp.bytes().await.unwrap();
-                let (tx, rx) = oneshot::channel::<(Vec<u8>, &'static str)>();
-                spawn_blocking(|| {
+                let (body, content_type) = spawn_blocking(|| {
                     use libwebp_sys::{WebPEncodeRGB, WebPFree};
 
                     let image = image::load_from_memory(&resp_bytes).unwrap();
@@ -294,13 +291,12 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
                     };
 
                     if bytes.len() < resp_bytes.len() {
-                        tx.send((bytes, "image/webp")).unwrap();
-                        return;
+                        (bytes, "image/webp")
+                    } else {
+                        (resp_bytes.into(), "image/jpeg")
                     }
 
-                    tx.send((resp_bytes.into(), "image/jpeg")).unwrap();
-                });
-                let (body, content_type) = rx.await.unwrap();
+                }).await.unwrap();
                 response.content_type(content_type);
                 return Ok(response.body(body));
             }
