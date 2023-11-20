@@ -155,6 +155,8 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
                 return Err("Invalid qhash provided".into());
             }
 
+            let path = req.path().as_bytes().to_owned();
+
             // Store sorted key-value pairs
             let mut set = BTreeSet::new();
             {
@@ -175,12 +177,16 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
                     hasher.update(&value);
                 }
 
+                hasher.update(&path);
+
                 hasher.update(secret.as_bytes());
 
                 let hash = hasher.finalize().to_hex();
-                
+
                 hash[..8].to_owned()
-            }).await.unwrap();
+            })
+            .await
+            .unwrap();
 
             if hash != qhash {
                 return Err("Invalid qhash provided".into());
@@ -306,7 +312,9 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
                     } else {
                         (resp_bytes.into(), "image/jpeg")
                     }
-                }).await.unwrap();
+                })
+                .await
+                .unwrap();
                 response.content_type(content_type);
                 return Ok(response.body(body));
             }
@@ -346,8 +354,9 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
                     } else {
                         (resp_bytes.into(), "image/jpeg")
                     }
-
-                }).await.unwrap();
+                })
+                .await
+                .unwrap();
                 response.content_type(content_type);
                 return Ok(response.body(body));
             }
