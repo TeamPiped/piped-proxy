@@ -167,8 +167,7 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
                 }
             }
 
-            let (tx, rx) = oneshot::channel::<String>();
-            spawn_blocking(move || {
+            let hash = spawn_blocking(move || {
                 let mut hasher = blake3::Hasher::new();
 
                 for (key, value) in set {
@@ -180,10 +179,8 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
 
                 let hash = hasher.finalize().to_hex();
                 let hash = hash[..8].to_owned();
-                tx.send(hash).unwrap();
-            });
-
-            let hash = rx.await.unwrap();
+                hash
+            }).await.unwrap();
 
             if hash != qhash {
                 return Err("Invalid qhash provided".into());
