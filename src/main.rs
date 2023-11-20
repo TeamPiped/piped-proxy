@@ -223,7 +223,7 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
         let collected = query
             .into_pairs()
             .into_iter()
-            .filter(|(key, _)| key != "host" && key != "rewrite")
+            .filter(|(key, _)| !matches!(key.as_str(), "host" | "rewrite" | "qhash"))
             .collect::<Vec<_>>();
         QString::new(collected)
     };
