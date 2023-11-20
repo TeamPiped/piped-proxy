@@ -178,8 +178,8 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
                 hasher.update(secret.as_bytes());
 
                 let hash = hasher.finalize().to_hex();
-                let hash = hash[..8].to_owned();
-                hash
+                
+                hash[..8].to_owned()
             }).await.unwrap();
 
             if hash != qhash {
