@@ -4,6 +4,7 @@ use once_cell::sync::Lazy;
 use qstring::QString;
 use regex::Regex;
 use reqwest::{Body, Client, Request, Url};
+use std::collections::BTreeMap;
 use std::env;
 use std::error::Error;
 
@@ -406,22 +407,65 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
     Ok(response.streaming(resp.bytes_stream()))
 }
 
+fn finalize_url(path: &str, query: BTreeMap<String, String>) -> String {
+    #[cfg(feature = "qhash")]
+    {
+        use std::collections::BTreeSet;
+
+        let qhash = {
+            let secret = env::var("HASH_SECRET");
+            if let Ok(secret) = secret {
+                let set = query
+                    .iter()
+                    .filter(|(key, _)| !matches!(key.as_str(), "qhash" | "range" | "rewrite"))
+                    .map(|(key, value)| (key.as_bytes().to_owned(), value.as_bytes().to_owned()))
+                    .collect::<BTreeSet<_>>();
+
+                let mut hasher = blake3::Hasher::new();
+
+                for (key, value) in set {
+                    hasher.update(&key);
+                    hasher.update(&value);
+                }
+
+                hasher.update(path.as_bytes());
+
+                hasher.update(secret.as_bytes());
+
+                let hash = hasher.finalize().to_hex();
+
+                Some(hash[..8].to_owned())
+            } else {
+                None
+            }
+        };
+
+        if qhash.is_some() {
+            let mut query = QString::new(query.into_iter().collect::<Vec<_>>());
+            query.add_pair(("qhash", qhash.unwrap()));
+            return format!("{}?{}", path, query.to_string());
+        }
+    }
+
+    let query = QString::new(query.into_iter().collect::<Vec<_>>());
+    format!("{}?{}", path, query.to_string())
+}
+
 fn localize_url(url: &str, host: &str) -> String {
     if url.starts_with("https://") {
-        let mut url = Url::parse(url).unwrap();
+        let url = Url::parse(url).unwrap();
         let host = url.host().unwrap().to_string();
 
-        // set host query param
-        url.query_pairs_mut().append_pair("host", &host);
+        let mut query = url.query_pairs().into_owned().collect::<BTreeMap<_, _>>();
 
-        return format!("{}?{}", url.path(), url.query().unwrap());
+        query.insert("host".to_string(), host.clone());
+
+        return finalize_url(url.path(), query);
     } else if url.ends_with(".m3u8") || url.ends_with(".ts") {
-        return format!(
-            "{}{}host={}",
-            url,
-            if url.contains('?') { "&" } else { "?" },
-            host
-        );
+        let mut query = BTreeMap::new();
+        query.insert("host".to_string(), host.to_string());
+
+        return finalize_url(url, query);
     }
 
     url.to_string()
