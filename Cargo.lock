@@ -1406,6 +1406,8 @@ version = "0.1.0"
 dependencies = [
  "actix-web",
  "blake3",
+ "bytes",
+ "futures-util",
  "image",
  "libwebp-sys",
  "mimalloc",
