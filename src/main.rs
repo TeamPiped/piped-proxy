@@ -404,7 +404,7 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
                     let new_url = localize_url(url, host.as_str());
                     new_resp = new_resp.replace(url, new_url.as_str());
                 }
-                return Ok(response.body(resp_str));
+                return Ok(response.body(new_resp));
             }
         }
     }
