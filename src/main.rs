@@ -488,7 +488,6 @@ where
     buffer: BytesMut,
     found_stream: bool,
     remaining: usize,
-    finished: bool,
 }
 
 impl<S> UmpTransformStream<S>
@@ -501,7 +500,6 @@ where
             buffer: BytesMut::new(),
             found_stream: false,
             remaining: 0,
-            finished: false,
         }
     }
 }
@@ -519,7 +517,7 @@ where
             match item {
                 Some(Ok(bytes)) => {
                     if this.found_stream {
-                        if this.remaining > 0 {
+                        return if this.remaining > 0 {
                             let len = std::cmp::min(this.remaining, bytes.len());
                             this.remaining -= len;
                             if this.remaining == 0 {
@@ -527,19 +525,16 @@ where
                                 this.buffer.extend_from_slice(&bytes[len..]);
                                 this.found_stream = false;
                             }
-                            return Poll::Ready(Some(Ok(bytes.slice(0..len))));
+                            Poll::Ready(Some(Ok(bytes.slice(0..len))))
                         } else {
-                            this.finished = true;
-
-                            return Poll::Ready(None);
-                        }
+                            Poll::Ready(None)
+                        };
                     } else {
                         this.buffer.extend_from_slice(&bytes);
                     }
                 }
                 Some(Err(e)) => return Poll::Ready(Some(Err(e))),
                 None => {
-                    this.finished = true;
                     return Poll::Ready(None);
                 }
             }
@@ -554,7 +549,6 @@ where
                     let _ = this.buffer.split_to(s1 + s2 + segment_length as usize);
                 }
             } else {
-                this.found_stream = true;
                 this.remaining = segment_length as usize - 1;
 
                 let _ = this.buffer.split_to(s1 + s2 + 1);
@@ -566,6 +560,7 @@ where
                     return Poll::Ready(Some(Ok(this.buffer.split_to(len).into())));
                 } else {
                     this.remaining -= this.buffer.len();
+                    this.found_stream = true;
 
                     return Poll::Ready(Some(Ok(this.buffer.to_vec().into())));
                 }
