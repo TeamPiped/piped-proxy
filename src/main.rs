@@ -517,7 +517,7 @@ where
             match item {
                 Some(Ok(bytes)) => {
                     if this.found_stream {
-                        return if this.remaining > 0 {
+                        if this.remaining > 0 {
                             let len = std::cmp::min(this.remaining, bytes.len());
                             this.remaining -= len;
                             if this.remaining == 0 {
@@ -525,9 +525,11 @@ where
                                 this.buffer.extend_from_slice(&bytes[len..]);
                                 this.found_stream = false;
                             }
-                            Poll::Ready(Some(Ok(bytes.slice(0..len))))
+                            return Poll::Ready(Some(Ok(bytes.slice(0..len))));
                         } else {
-                            Poll::Ready(None)
+                            this.found_stream = false;
+                            this.buffer.clear();
+                            this.buffer.extend_from_slice(&bytes);
                         };
                     } else {
                         this.buffer.extend_from_slice(&bytes);
