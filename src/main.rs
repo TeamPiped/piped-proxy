@@ -142,7 +142,7 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
     }
 
     // parse query string
-    let query = QString::from(req.query_string());
+    let mut query = QString::from(req.query_string());
 
     #[cfg(feature = "qhash")]
     {
@@ -235,6 +235,14 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
     let is_ump = video_playback && query.get("ump").is_some();
 
     let mime_type = query.get("mime").map(|s| s.to_string());
+
+    if is_ump && !query.has("range") {
+        if let Some(range) = req.headers().get("range") {
+            let range = range.to_str().unwrap();
+            let range = range.replace("bytes=", "");
+            query.add_pair(("range", range));
+        }
+    }
 
     let qs = {
         let collected = query
