@@ -4,6 +4,12 @@ WORKDIR /app/
 
 COPY . .
 
+RUN --mount=type=cache,target=/var/cache/apt \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+    nasm && \
+    rm -rf /var/lib/apt/lists/*
+
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/app/target/   \
     cargo build --release && \
@@ -20,7 +26,6 @@ RUN --mount=type=cache,target=/var/cache/apt \
 WORKDIR /app/
 
 COPY --from=BUILD /app/piped-proxy .
-RUN mkdir -p /app/socket/
 
 EXPOSE 8080
 
