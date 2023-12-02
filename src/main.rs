@@ -47,7 +47,7 @@ async fn main() -> std::io::Result<()> {
     .await
 }
 
-static PREFIX_PATH: Lazy<String> = Lazy::new(|| String = env::var("PREFIX_PATH").unwrap_or_else(|_| "".to_string());
+static PREFIX_PATH: Lazy<String> = Lazy::new(|| String::from(env::var("PREFIX_PATH").unwrap_or_else(|_| "".to_string())));
 static RE_DOMAIN: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"^(?:[a-z\d.-]*\.)?([a-z\d-]*\.[a-z\d-]*)$").unwrap());
 static RE_MANIFEST: Lazy<Regex> = Lazy::new(|| Regex::new("(?m)URI=\"([^\"]+)\"").unwrap());
@@ -624,12 +624,12 @@ fn finalize_url(path: &str, query: BTreeMap<String, String>) -> String {
         if qhash.is_some() {
             let mut query = QString::new(query.into_iter().collect::<Vec<_>>());
             query.add_pair(("qhash", qhash.unwrap()));
-            return format!("{}?{}", path, query);
+            return format!("{}{}?{}", PREFIX_PATH.as_str(), path, query);
         }
     }
 
     let query = QString::new(query.into_iter().collect::<Vec<_>>());
-    format!("{}{}?{}", PREFIX_PATH.as_str(), path, query);
+    format!("{}{}?{}", PREFIX_PATH.as_str(), path, query)
 }
 
 fn localize_url(url: &str, host: &str) -> String {
