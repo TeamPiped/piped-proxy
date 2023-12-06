@@ -1,4 +1,4 @@
-use actix_web::http::Method;
+use actix_web::http::{Method, StatusCode};
 use actix_web::{web, App, HttpRequest, HttpResponse, HttpResponseBuilder, HttpServer};
 use once_cell::sync::Lazy;
 use qstring::QString;
@@ -120,6 +120,7 @@ fn is_header_allowed(header: &str) -> bool {
             | "report-to"
             | "strict-transport-security"
             | "user-agent"
+            | "range"
     )
 }
 
@@ -243,6 +244,8 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
             query.add_pair(("range", range));
         }
     }
+
+    let has_range = query.has("range");
 
     let qs = {
         let collected = query
@@ -426,6 +429,9 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
     if is_ump {
         if let Some(mime_type) = mime_type {
             response.content_type(mime_type);
+        }
+        if has_range {
+            response.status(StatusCode::PARTIAL_CONTENT);
         }
         let transformed_stream = UmpTransformStream::new(resp);
         return Ok(response.streaming(transformed_stream));
