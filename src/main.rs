@@ -245,8 +245,6 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
         }
     }
 
-    let has_range = query.has("range");
-
     let qs = {
         let collected = query
             .into_pairs()
@@ -430,7 +428,7 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
         if let Some(mime_type) = mime_type {
             response.content_type(mime_type);
         }
-        if has_range {
+        if req.headers().contains_key("range") {
             response.status(StatusCode::PARTIAL_CONTENT);
         }
         let transformed_stream = UmpTransformStream::new(resp);
