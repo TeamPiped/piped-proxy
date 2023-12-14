@@ -4,6 +4,7 @@ use once_cell::sync::Lazy;
 use qstring::QString;
 use regex::Regex;
 use reqwest::{Body, Client, Request, Url};
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::io::ErrorKind;
@@ -184,7 +185,20 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
                     hasher.update(&value);
                 }
 
-                hasher.update(&path);
+                let range_marker = b"/range/";
+
+                // Find the slice before "/range/"
+                if let Some(position) = path
+                    .windows(range_marker.len())
+                    .position(|window| window == range_marker)
+                {
+                    // Update the hasher with the part of the path before "/range/"
+                    // We add +1 to include the "/" in the hash
+                    // This is done for DASH streams for the manifests provided by YouTube
+                    hasher.update(&path[..(position + 1)]);
+                } else {
+                    hasher.update(&path);
+                }
 
                 hasher.update(secret.as_bytes());
 
