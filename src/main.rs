@@ -410,7 +410,8 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
                 for capture in captures {
                     let url = capture.get(1).unwrap().as_str();
                     let new_url = localize_url(url, host.as_str());
-                    new_resp = new_resp.replace(url, new_url.as_str());
+                    let new_url = escape_xml(new_url.as_str());
+                    new_resp = new_resp.replace(url, new_url.as_ref());
                 }
                 return Ok(response.body(new_resp));
             }
@@ -633,6 +634,27 @@ fn finalize_url(path: &str, query: BTreeMap<String, String>) -> String {
 
     let query = QString::new(query.into_iter().collect::<Vec<_>>());
     format!("{}?{}", path, query)
+}
+
+pub fn escape_xml(raw: &str) -> Cow<'_, str> {
+    if !raw.contains(&['<', '>', '&', '\'', '"'][..]) {
+        // If there are no characters to escape, return the original string.
+        Cow::Borrowed(raw)
+    } else {
+        // If there are characters to escape, build a new string with the replacements.
+        let mut escaped = String::with_capacity(raw.len());
+        for c in raw.chars() {
+            match c {
+                '<' => escaped.push_str("&lt;"),
+                '>' => escaped.push_str("&gt;"),
+                '&' => escaped.push_str("&amp;"),
+                '\'' => escaped.push_str("&apos;"),
+                '"' => escaped.push_str("&quot;"),
+                _ => escaped.push(c),
+            }
+        }
+        Cow::Owned(escaped)
+    }
 }
 
 fn localize_url(url: &str, host: &str) -> String {
