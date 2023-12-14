@@ -119,11 +119,11 @@ where
         if !this.found_stream && !this.buffer.is_empty() {
             let (segment_type, s1) = match read_variable_integer(&this.buffer, 0) {
                 Ok(result) => result,
-                Err(e) => return Poll::Ready(Some(Err(e))),
+                Err(_) => return Poll::Pending,
             };
             let (segment_length, s2) = match read_variable_integer(&this.buffer, s1) {
                 Ok(result) => result,
-                Err(e) => return Poll::Ready(Some(Err(e))),
+                Err(_) => return Poll::Pending,
             };
             if segment_type != 21 {
                 // Not the stream
