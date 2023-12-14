@@ -23,7 +23,7 @@ jobs:
         run: RUSTFLAGS='-C target-feature=+crt-static' cargo build --release --target x86_64-unknown-linux-gnu
       - run: mv target/x86_64-unknown-linux-gnu/release/piped-proxy piped-proxy
       - name: Upload artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: piped-proxy
           path: piped-proxy
