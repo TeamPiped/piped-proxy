@@ -14,7 +14,7 @@ use std::{env, io};
 #[cfg(not(any(feature = "reqwest-native-tls", feature = "reqwest-rustls")))]
 compile_error!("feature \"reqwest-native-tls\" or \"reqwest-rustls\" must be set for proxy to have TLS support");
 
-use futures_util::{TryStreamExt};
+use futures_util::TryStreamExt;
 #[cfg(any(feature = "webp", feature = "avif", feature = "qhash"))]
 use tokio::task::spawn_blocking;
 use ump_stream::UmpTransformStream;
@@ -448,6 +448,11 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
         }
         let resp = resp.map_err(|e| io::Error::new(ErrorKind::Other, e));
         let transformed_stream = UmpTransformStream::new(resp);
+        // print errors
+        let transformed_stream = transformed_stream.map_err(|e| {
+            eprintln!("UMP Transforming Error: {}", e);
+            e
+        });
         return Ok(response.streaming(transformed_stream));
     }
 
