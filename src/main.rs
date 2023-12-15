@@ -120,6 +120,7 @@ fn is_header_allowed(header: &str) -> bool {
             | "strict-transport-security"
             | "user-agent"
             | "range"
+            | "transfer-encoding"
     )
 }
 
@@ -249,13 +250,39 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
 
     let mime_type = query.get("mime").map(|s| s.to_string());
 
-    if is_ump && !query.has("range") {
+    let clen = query
+        .get("clen")
+        .map(|s| s.to_string().parse::<u64>().unwrap());
+
+    if video_playback && !query.has("range") {
         if let Some(range) = req.headers().get("range") {
             let range = range.to_str().unwrap();
             let range = range.replace("bytes=", "");
-            query.add_pair(("range", range));
+            let range = range.split('-').collect::<Vec<_>>();
+            let start = range[0].parse::<u64>().unwrap();
+            let end = match range[1].parse::<u64>() {
+                Ok(end) => end,
+                Err(_) => {
+                    if let Some(clen) = clen {
+                        clen - 1
+                    } else {
+                        0
+                    }
+                }
+            };
+            if end != 0 {
+                let range = format!("{}-{}", start, end);
+                query.add_pair(("range", range));
+            }
+        } else {
+            if let Some(clen) = clen {
+                let range = format!("0-{}", clen - 1);
+                query.add_pair(("range", range));
+            }
         }
     }
+
+    let range = query.get("range").map(|s| s.to_string());
 
     let qs = {
         let collected = query
@@ -434,7 +461,7 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
     }
 
     if let Some(content_length) = resp.headers().get("content-length") {
-        response.append_header(("content-length", content_length));
+        response.no_chunking(content_length.to_str().unwrap().parse::<u64>().unwrap());
     }
 
     let resp = resp.bytes_stream();
@@ -444,7 +471,14 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
             response.content_type(mime_type);
         }
         if req.headers().contains_key("range") {
-            response.status(StatusCode::PARTIAL_CONTENT);
+            // check if it's not the whole stream
+            if let Some(ref range) = range {
+                if let Some(clen) = clen {
+                    if range != &format!("0-{}", clen - 1) {
+                        response.status(StatusCode::PARTIAL_CONTENT);
+                    }
+                }
+            }
         }
         let resp = resp.map_err(|e| io::Error::new(ErrorKind::Other, e));
         let transformed_stream = UmpTransformStream::new(resp);
@@ -453,6 +487,21 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
             eprintln!("UMP Transforming Error: {}", e);
             e
         });
+
+        // calculate content length from clen and range
+        if let Some(clen) = clen {
+            let length = if let Some(ref range) = range {
+                let range = range.replace("bytes=", "");
+                let range = range.split('-').collect::<Vec<_>>();
+                let start = range[0].parse::<u64>().unwrap();
+                let end = range[1].parse::<u64>().unwrap_or(clen - 1);
+                end - start + 1
+            } else {
+                clen
+            };
+            response.no_chunking(length);
+        }
+
         return Ok(response.streaming(transformed_stream));
     }
 
