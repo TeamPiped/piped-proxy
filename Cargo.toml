@@ -9,7 +9,7 @@ version = "0.1.0"
 # Web Requests & Async Runtime
 tokio = { version = "1.35.0", features = ["full"] }
 actix-web = "4.4.0"
-reqwest = { version = "0.11.22", features = ["stream", "brotli", "gzip", "socks"], default-features = false }
+reqwest = { version = "0.11.23", features = ["stream", "brotli", "gzip", "socks"], default-features = false }
 qstring = "0.7.2"
 
 # Alternate Allocator 
