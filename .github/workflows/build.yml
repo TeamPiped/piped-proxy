@@ -18,7 +18,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: rui314/setup-mold@v1
       - name: Set up NASM
-        uses: ilammy/setup-nasm@v1.4.0
+        uses: ilammy/setup-nasm@v1.5.1
       - name: Build
         run: RUSTFLAGS='-C target-feature=+crt-static' cargo build --release --target x86_64-unknown-linux-gnu
       - run: mv target/x86_64-unknown-linux-gnu/release/piped-proxy piped-proxy
