@@ -464,9 +464,7 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
         response.no_chunking(content_length.to_str().unwrap().parse::<u64>().unwrap());
     }
 
-    let resp = resp.bytes_stream();
-
-    if is_ump {
+    if is_ump && resp.status().is_success() {
         if let Some(mime_type) = mime_type {
             response.content_type(mime_type);
         }
@@ -480,6 +478,7 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
                 }
             }
         }
+        let resp = resp.bytes_stream();
         let resp = resp.map_err(|e| io::Error::new(ErrorKind::Other, e));
         let transformed_stream = UmpTransformStream::new(resp);
         // print errors
@@ -506,5 +505,5 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
     }
 
     // Stream response
-    Ok(response.streaming(resp))
+    Ok(response.streaming(resp.bytes_stream()))
 }
