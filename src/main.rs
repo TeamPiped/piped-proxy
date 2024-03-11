@@ -274,11 +274,9 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
                 let range = format!("{}-{}", start, end);
                 query.add_pair(("range", range));
             }
-        } else {
-            if let Some(clen) = clen {
-                let range = format!("0-{}", clen - 1);
-                query.add_pair(("range", range));
-            }
+        } else if let Some(clen) = clen {
+            let range = format!("0-{}", clen - 1);
+            query.add_pair(("range", range));
         }
     }
 
