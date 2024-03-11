@@ -1423,6 +1423,7 @@ dependencies = [
  "bytes",
  "futures-util",
  "image",
+ "lazy_static",
  "libwebp-sys",
  "mimalloc",
  "once_cell",
