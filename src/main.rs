@@ -291,7 +291,7 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
         QString::new(collected)
     };
 
-    let mut url = Url::parse(&format!("https://{}{}", host, req.path()))?;
+    let mut url = Url::parse(&format!("https://{}{}", host, req.path().replace("seg.aac", "seg.ts")))?;
     url.set_query(Some(qs.to_string().as_str()));
 
     let method = {
@@ -435,6 +435,8 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
                                     utils::localize_url(url, host.as_str()).as_str(),
                                 );
                             }
+                        } else if line.contains("/itag/233") || line.contains("/itag/234") {
+                            return utils::localize_url(line.replace("seg.ts", "seg.aac").as_str(), host.as_str());
                         }
                         utils::localize_url(line, host.as_str())
                     })
