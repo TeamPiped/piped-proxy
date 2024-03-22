@@ -112,6 +112,11 @@ fn is_header_allowed(header: &str) -> bool {
     !matches!(
         header,
         "host"
+            | "authorization"
+            | "origin"
+            | "referer"
+            | "cookie"
+            | "etag"
             | "content-length"
             | "set-cookie"
             | "alt-svc"
