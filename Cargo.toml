@@ -7,7 +7,7 @@ version = "0.1.0"
 
 [dependencies]
 # Web Requests & Async Runtime
-tokio = { version = "1.36.0", features = ["full"] }
+tokio = { version = "1.37.0", features = ["full"] }
 actix-web = "4.5.1"
 reqwest = { version = "0.11.27", features = ["stream", "brotli", "gzip", "socks"], default-features = false }
 qstring = "0.7.2"
