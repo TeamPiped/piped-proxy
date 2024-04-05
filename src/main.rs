@@ -121,6 +121,9 @@ fn is_header_allowed(header: &str) -> bool {
             | "user-agent"
             | "range"
             | "transfer-encoding"
+            | "x-real-ip"
+            | "origin"
+            | "referer"
     )
 }
 
