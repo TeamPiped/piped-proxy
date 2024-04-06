@@ -126,6 +126,9 @@ fn is_header_allowed(header: &str) -> bool {
             | "user-agent"
             | "range"
             | "transfer-encoding"
+            | "x-real-ip"
+            | "origin"
+            | "referer"
     )
 }
 
@@ -279,11 +282,9 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
                 let range = format!("{}-{}", start, end);
                 query.add_pair(("range", range));
             }
-        } else {
-            if let Some(clen) = clen {
-                let range = format!("0-{}", clen - 1);
-                query.add_pair(("range", range));
-            }
+        } else if let Some(clen) = clen {
+            let range = format!("0-{}", clen - 1);
+            query.add_pair(("range", range));
         }
     }
 
