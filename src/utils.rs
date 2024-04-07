@@ -1,4 +1,3 @@
-use once_cell::sync::Lazy;
 use qstring::QString;
 use reqwest::Url;
 use std::borrow::Cow;
@@ -6,10 +5,13 @@ use std::collections::BTreeMap;
 use std::env;
 
 #[cfg(feature = "prefix-path")]
-static PREFIX_PATH: Lazy<Option<String>> = Lazy::new(|| match env::var("PREFIX_PATH") {
-    Ok(v) => Some(String::from(v)),
-    Err(e) => panic!("$PREFIX_PATH is not set ({})", e)
-});
+{
+    use once_cell::sync::Lazy;
+    static PREFIX_PATH: Lazy<Option<String>> = Lazy::new(|| match env::var("PREFIX_PATH") {
+        Ok(v) => Some(String::from(v)),
+        Err(e) => panic!("$PREFIX_PATH is not set ({})", e)
+    });
+}
 
 pub fn read_buf(buf: &[u8], pos: &mut usize) -> u8 {
     let byte = buf[*pos];
