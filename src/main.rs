@@ -124,6 +124,8 @@ fn is_header_allowed(header: &str) -> bool {
             | "x-real-ip"
             | "origin"
             | "referer"
+            // the 'x-title' header contains non-ascii characters which is not allowed on some HTTP clients
+            | "x-title"
     )
 }
 
