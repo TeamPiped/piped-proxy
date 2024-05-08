@@ -43,9 +43,9 @@ fn finalize_url(path: &str, query: BTreeMap<String, String>) -> String {
             }
         };
 
-        if qhash.is_some() {
+        if let Some(qhash) = qhash {
             let mut query = QString::new(query.into_iter().collect::<Vec<_>>());
-            query.add_pair(("qhash", qhash.unwrap()));
+            query.add_pair(("qhash", qhash));
             return format!("{}?{}", path, query);
         }
     }
