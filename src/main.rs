@@ -34,7 +34,7 @@ async fn main() -> std::io::Result<()> {
 
     // get socket/port from env
     // backwards compat when only UDS is set
-    if get_env_bool("UDS") {
+    if utils::get_env_bool("UDS") {
         let socket_path =
             env::var("BIND_UNIX").unwrap_or_else(|_| "./socket/actix.sock".to_string());
         server.bind_uds(socket_path)?
@@ -57,7 +57,7 @@ static CLIENT: Lazy<Client> = Lazy::new(|| {
         .user_agent("Mozilla/5.0 (Windows NT 10.0; rv:102.0) Gecko/20100101 Firefox/102.0");
 
     let proxy = if let Ok(proxy) = env::var("PROXY") {
-        Some(reqwest::Proxy::all(proxy).unwrap())
+        reqwest::Proxy::all(proxy).ok()
     } else {
         None
     };
@@ -74,14 +74,13 @@ static CLIENT: Lazy<Client> = Lazy::new(|| {
         builder
     };
 
-    if get_env_bool("IPV4_ONLY") {
-        builder
-            .local_address(Some("0.0.0.0".parse().unwrap()))
-            .build()
-            .unwrap()
+    if utils::get_env_bool("IPV4_ONLY") {
+        builder.local_address("0.0.0.0".parse().ok())
     } else {
-        builder.build().unwrap()
+        builder
     }
+    .build()
+    .unwrap()
 });
 
 const ANDROID_USER_AGENT: &str = "com.google.android.youtube/1537338816 (Linux; U; Android 13; en_US; ; Build/TQ2A.230505.002; Cronet/113.0.5672.24)";
@@ -129,13 +128,6 @@ fn is_header_allowed(header: &str) -> bool {
     )
 }
 
-fn get_env_bool(key: &str) -> bool {
-    match env::var(key) {
-        Ok(val) => val.to_lowercase() == "true" || val == "1",
-        Err(_) => false,
-    }
-}
-
 async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
     if req.method() == Method::OPTIONS {
         let mut response = HttpResponse::Ok();
@@ -156,13 +148,9 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
 
         let secret = env::var("HASH_SECRET");
         if let Ok(secret) = secret {
-            let qhash = query.get("qhash");
-
-            if qhash.is_none() {
+            let Some(qhash) = query.get("qhash") else {
                 return Err("No qhash provided".into());
-            }
-
-            let qhash = qhash.unwrap();
+            };
 
             if qhash.len() != 8 {
                 return Err("Invalid qhash provided".into());
@@ -220,29 +208,24 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
         }
     }
 
-    let res = query.get("host");
-    let res = res.map(|s| s.to_string());
-
-    if res.is_none() {
+    let Some(host) = query.get("host").map(|s| s.to_string()) else {
         return Err("No host provided".into());
-    }
+    };
 
     #[cfg(any(feature = "webp", feature = "avif"))]
-    let disallow_image_transcoding = get_env_bool("DISALLOW_IMAGE_TRANSCODING");
+    let disallow_image_transcoding = utils::get_env_bool("DISALLOW_IMAGE_TRANSCODING");
 
     let rewrite = query.get("rewrite") != Some("false");
 
     #[cfg(feature = "avif")]
     let avif = query.get("avif") == Some("true");
 
-    let host = res.unwrap();
-    let domain = RE_DOMAIN.captures(host.as_str());
-
-    if domain.is_none() {
+    let Some(domain) = RE_DOMAIN
+        .captures(host.as_str())
+        .map(|domain| domain.get(1).unwrap().as_str())
+    else {
         return Err("Invalid host provided".into());
-    }
-
-    let domain = domain.unwrap().get(1).unwrap().as_str();
+    };
 
     if !ALLOWED_DOMAINS.contains(&domain) {
         return Err("Domain not allowed".into());
@@ -325,13 +308,7 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
         request_headers.insert("User-Agent", ANDROID_USER_AGENT.parse().unwrap());
     }
 
-    let resp = CLIENT.execute(request).await;
-
-    if resp.is_err() {
-        return Err(resp.err().unwrap().into());
-    }
-
-    let resp = resp?;
+    let resp = CLIENT.execute(request).await?;
 
     let mut response = HttpResponse::build(resp.status());
 

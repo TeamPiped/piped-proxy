@@ -2,6 +2,7 @@ use qstring::QString;
 use reqwest::Url;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
+use std::env;
 
 pub fn read_buf(buf: &[u8], pos: &mut usize) -> u8 {
     let byte = buf[*pos];
@@ -13,7 +14,6 @@ fn finalize_url(path: &str, query: BTreeMap<String, String>) -> String {
     #[cfg(feature = "qhash")]
     {
         use std::collections::BTreeSet;
-        use std::env;
 
         let qhash = {
             let secret = env::var("HASH_SECRET");
@@ -43,9 +43,9 @@ fn finalize_url(path: &str, query: BTreeMap<String, String>) -> String {
             }
         };
 
-        if qhash.is_some() {
+        if let Some(qhash) = qhash {
             let mut query = QString::new(query.into_iter().collect::<Vec<_>>());
-            query.add_pair(("qhash", qhash.unwrap()));
+            query.add_pair(("qhash", qhash));
             return format!("{}?{}", path, query);
         }
     }
@@ -92,5 +92,12 @@ pub fn escape_xml(raw: &str) -> Cow<'_, str> {
             }
         }
         Cow::Owned(escaped)
+    }
+}
+
+pub fn get_env_bool(key: &str) -> bool {
+    match env::var(key) {
+        Ok(val) => val.to_lowercase() == "true" || val == "1",
+        Err(_) => false,
     }
 }
