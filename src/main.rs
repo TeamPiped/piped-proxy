@@ -3,12 +3,15 @@ mod utils;
 
 use actix_web::http::{Method, StatusCode};
 use actix_web::{web, App, HttpRequest, HttpResponse, HttpResponseBuilder, HttpServer};
+use listenfd::ListenFd;
 use once_cell::sync::Lazy;
 use qstring::QString;
 use regex::Regex;
 use reqwest::{Body, Client, Request, Url};
 use std::error::Error;
 use std::io::ErrorKind;
+use std::net::TcpListener;
+use std::os::unix::net::UnixListener;
 use std::{env, io};
 
 #[cfg(not(any(feature = "reqwest-native-tls", feature = "reqwest-rustls")))]
@@ -23,27 +26,68 @@ use ump_stream::UmpTransformStream;
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
+fn try_get_fd_listeners() -> (Option<UnixListener>, Option<TcpListener>) {
+    let mut fd = ListenFd::from_env();
+
+    let unix_listener = env::var("FD_UNIX").ok().map(|fd_unix| {
+        let fd_pos = fd_unix.parse().expect("FD_UNIX is not a number");
+        println!("Trying to take Unix socket at position {}", fd_pos);
+        fd.take_unix_listener(fd_pos)
+            .expect(format!("fd {} is not a Unix socket", fd_pos).as_str())
+            .expect(format!("fd {} has already been used", fd_pos).as_str())
+    });
+
+    let tcp_listener = env::var("FD_TCP").ok().map(|fd_tcp| {
+        let fd_pos = fd_tcp.parse().expect("FD_TCP is not a number");
+        println!("Trying to take TCP listener at position {}", fd_pos);
+        fd.take_tcp_listener(fd_pos)
+            .expect(format!("fd {} is not a TCP listener", fd_pos).as_str())
+            .expect(format!("fd {} has already been used", fd_pos).as_str())
+    });
+
+    (unix_listener, tcp_listener)
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     println!("Running server!");
 
-    let server = HttpServer::new(|| {
+    let mut server = HttpServer::new(|| {
         // match all requests
         App::new().default_service(web::to(index))
     });
 
-    // get socket/port from env
-    // backwards compat when only UDS is set
-    if utils::get_env_bool("UDS") {
-        let socket_path =
-            env::var("BIND_UNIX").unwrap_or_else(|_| "./socket/actix.sock".to_string());
-        server.bind_uds(socket_path)?
-    } else {
-        let bind = env::var("BIND").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
-        server.bind(bind)?
+    let fd_listeners = try_get_fd_listeners();
+
+    if let Some(unix_listener) = fd_listeners.0 {
+        server = server
+            .listen_uds(unix_listener)
+            .expect("Error while trying to listen on Unix socket passed by fd");
+        println!("Listening on Unix socket passed by fd.");
     }
-    .run()
-    .await
+
+    if let Some(tcp_listener) = fd_listeners.1 {
+        server = server
+            .listen(tcp_listener)
+            .expect("Error while trying to listen on TCP listener passed by fd");
+        println!("Listening on TCP listener passed by fd.");
+    }
+
+    // Only bind manually if there is not already a listener
+    if server.addrs().is_empty() {
+        // get socket/port from env
+        // backwards compat when only UDS is set
+        server = if utils::get_env_bool("UDS") {
+            let socket_path =
+                env::var("BIND_UNIX").unwrap_or_else(|_| "./socket/actix.sock".to_string());
+            server.bind_uds(socket_path)?
+        } else {
+            let bind = env::var("BIND").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
+            server.bind(bind)?
+        };
+    }
+
+    server.run().await
 }
 
 static RE_DOMAIN: Lazy<Regex> =
