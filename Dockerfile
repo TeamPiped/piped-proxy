@@ -1,27 +1,17 @@
-FROM rust:slim as BUILD
+FROM rust:alpine as BUILD
 
-WORKDIR /app/
+RUN apk add --no-cache nasm git g++
 
-COPY . .
+RUN git clone https://github.com/TeamPiped/piped-proxy.git /app
 
-RUN --mount=type=cache,target=/var/cache/apt \
-    apt-get update && \
-    apt-get install -y --no-install-recommends \
-    nasm && \
-    rm -rf /var/lib/apt/lists/*
+WORKDIR /app
 
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/app/target/   \
-    cargo build --release && \
-    mv target/release/piped-proxy .
+    cargo build --release --target=$(rustc -vV | grep host | cut -d ' ' -f2) && \
+    mv target/$(rustc -vV | grep host | cut -d ' ' -f2)/release/piped-proxy .
 
-FROM debian:stable-slim
-
-RUN --mount=type=cache,target=/var/cache/apt \
-    apt-get update && \
-    apt-get install -y --no-install-recommends \
-    ca-certificates && \
-    rm -rf /var/lib/apt/lists/*
+FROM scratch
 
 WORKDIR /app/
 
