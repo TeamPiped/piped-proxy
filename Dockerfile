@@ -8,12 +8,12 @@ WORKDIR /app
 
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/app/target/   \
-    cargo build --release --target=$(rustc -vV | grep host | cut -d ' ' -f2) && \
-    mv target/$(rustc -vV | grep host | cut -d ' ' -f2)/release/piped-proxy .
+    cargo build --release && \
+    mv target/release/piped-proxy .
 
 FROM scratch
 
-WORKDIR /app/
+WORKDIR /app
 
 COPY --from=BUILD /app/piped-proxy .
 
