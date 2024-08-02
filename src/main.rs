@@ -277,6 +277,7 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
 
     let video_playback = req.path().eq("/videoplayback");
     let is_android = video_playback && query.get("c").unwrap_or("").eq("ANDROID");
+    let is_web = video_playback && query.get("c").unwrap_or("").eq("WEB");
 
     let is_ump = video_playback && query.get("ump").is_some();
 
@@ -327,7 +328,7 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
     url.set_query(Some(qs.to_string().as_str()));
 
     let method = {
-        if !is_android && video_playback {
+        if is_web && video_playback {
             Method::POST
         } else {
             req.method().clone()
@@ -336,7 +337,7 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
 
     let mut request = Request::new(method, url);
 
-    if !is_android && video_playback {
+    if is_web && video_playback {
         request.body_mut().replace(Body::from("x\0"));
     }
 
