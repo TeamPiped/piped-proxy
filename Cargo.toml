@@ -43,5 +43,7 @@ optimized = ["libwebp-sys?/sse41", "libwebp-sys?/avx2", "libwebp-sys?/neon"]
 
 qhash = ["blake3"]
 
+invidious = []
+
 [profile.release]
 lto = true

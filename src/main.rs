@@ -1,13 +1,18 @@
+mod client;
+mod headers;
+#[cfg(feature = "invidious")]
+mod proxy_image;
 mod ump_stream;
 mod utils;
 
 use actix_web::http::{Method, StatusCode};
-use actix_web::{web, App, HttpRequest, HttpResponse, HttpResponseBuilder, HttpServer};
+use actix_web::{web, App, HttpRequest, HttpResponse, HttpServer};
+use client::create_request;
 use listenfd::ListenFd;
 use once_cell::sync::Lazy;
 use qstring::QString;
 use regex::Regex;
-use reqwest::{Body, Client, Request, Url};
+use reqwest::{Body, Url};
 use std::error::Error;
 use std::io::ErrorKind;
 use std::net::TcpListener;
@@ -21,6 +26,9 @@ use futures_util::TryStreamExt;
 #[cfg(any(feature = "webp", feature = "avif", feature = "qhash"))]
 use tokio::task::spawn_blocking;
 use ump_stream::UmpTransformStream;
+
+use crate::client::CLIENT;
+use crate::headers::{add_headers, copy_response_headers, get_content_length};
 
 #[cfg(feature = "mimalloc")]
 #[global_allocator]
@@ -96,37 +104,6 @@ static RE_MANIFEST: Lazy<Regex> = Lazy::new(|| Regex::new("(?m)URI=\"([^\"]+)\""
 static RE_DASH_MANIFEST: Lazy<Regex> =
     Lazy::new(|| Regex::new("BaseURL>(https://[^<]+)</BaseURL").unwrap());
 
-static CLIENT: Lazy<Client> = Lazy::new(|| {
-    let builder = Client::builder()
-        .user_agent("Mozilla/5.0 (Windows NT 10.0; rv:102.0) Gecko/20100101 Firefox/102.0");
-
-    let proxy = if let Ok(proxy) = env::var("PROXY") {
-        reqwest::Proxy::all(proxy).ok()
-    } else {
-        None
-    };
-
-    let builder = if let Some(proxy) = proxy {
-        // proxy basic auth
-        if let Ok(proxy_auth_user) = env::var("PROXY_USER") {
-            let proxy_auth_pass = env::var("PROXY_PASS").unwrap_or_default();
-            builder.proxy(proxy.basic_auth(&proxy_auth_user, &proxy_auth_pass))
-        } else {
-            builder.proxy(proxy)
-        }
-    } else {
-        builder
-    };
-
-    if utils::get_env_bool("IPV4_ONLY") {
-        builder.local_address("0.0.0.0".parse().ok())
-    } else {
-        builder
-    }
-    .build()
-    .unwrap()
-});
-
 const ANDROID_USER_AGENT: &str = "com.google.android.youtube/1537338816 (Linux; U; Android 13; en_US; ; Build/TQ2A.230505.002; Cronet/113.0.5672.24)";
 const ALLOWED_DOMAINS: [&str; 8] = [
     "youtube.com",
@@ -139,39 +116,6 @@ const ALLOWED_DOMAINS: [&str; 8] = [
     "ajay.app",
 ];
 
-fn add_headers(response: &mut HttpResponseBuilder) {
-    response
-        .append_header(("Access-Control-Allow-Origin", "*"))
-        .append_header(("Access-Control-Allow-Headers", "*"))
-        .append_header(("Access-Control-Allow-Methods", "*"))
-        .append_header(("Access-Control-Max-Age", "1728000"));
-}
-
-fn is_header_allowed(header: &str) -> bool {
-    if header.starts_with("access-control") {
-        return false;
-    }
-
-    !matches!(
-        header,
-        "host"
-            | "content-length"
-            | "set-cookie"
-            | "alt-svc"
-            | "accept-ch"
-            | "report-to"
-            | "strict-transport-security"
-            | "user-agent"
-            | "range"
-            | "transfer-encoding"
-            | "x-real-ip"
-            | "origin"
-            | "referer"
-            // the 'x-title' header contains non-ascii characters which is not allowed on some HTTP clients
-            | "x-title"
-    )
-}
-
 async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
     if req.method() == Method::OPTIONS {
         let mut response = HttpResponse::Ok();
@@ -181,6 +125,13 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
         let mut response = HttpResponse::MethodNotAllowed();
         add_headers(&mut response);
         return Ok(response.finish());
+    }
+
+    #[cfg(feature = "invidious")]
+    if matches!(req.path().get(0..4), Some("/vi/") | Some("/sb/")) {
+        return Ok(proxy_image::proxy(req, proxy_image::ImageSource::YtImg).await);
+    } else if req.path().starts_with("/ggpht/") {
+        return Ok(proxy_image::proxy(req, proxy_image::ImageSource::GgPht).await);
     }
 
     // parse query string
@@ -335,35 +286,23 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
         }
     };
 
-    let mut request = Request::new(method, url);
+    let mut request = create_request(&req, method, url);
 
     if is_web && video_playback {
         request.body_mut().replace(Body::from("x\0"));
     }
 
-    let request_headers = request.headers_mut();
-
-    for (key, value) in req.headers() {
-        if is_header_allowed(key.as_str()) {
-            request_headers.insert(key, value.clone());
-        }
-    }
-
     if is_android {
-        request_headers.insert("User-Agent", ANDROID_USER_AGENT.parse().unwrap());
+        request
+            .headers_mut()
+            .insert("User-Agent", ANDROID_USER_AGENT.parse().unwrap());
     }
 
     let resp = CLIENT.execute(request).await?;
 
     let mut response = HttpResponse::build(resp.status());
 
-    add_headers(&mut response);
-
-    for (key, value) in resp.headers() {
-        if is_header_allowed(key.as_str()) {
-            response.append_header((key.as_str(), value.as_bytes()));
-        }
-    }
+    copy_response_headers(&resp, &mut response);
 
     if rewrite {
         if let Some(content_type) = resp.headers().get("content-type") {
@@ -485,8 +424,8 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
         }
     }
 
-    if let Some(content_length) = resp.headers().get("content-length") {
-        response.no_chunking(content_length.to_str().unwrap().parse::<u64>().unwrap());
+    if let Some(content_length) = get_content_length(resp.headers()) {
+        response.no_chunking(content_length);
     }
 
     if is_ump && resp.status().is_success() {
