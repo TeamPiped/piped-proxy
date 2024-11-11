@@ -1,24 +1,43 @@
+#[cfg(any(feature = "webp", feature = "avif"))]
+use actix_web::Either;
 use actix_web::{HttpRequest, HttpResponse};
 use once_cell::sync::Lazy;
 use reqwest::Url;
 
 use crate::client::{create_request, CLIENT};
 use crate::headers::{copy_response_headers, get_content_length};
+#[cfg(any(feature = "webp", feature = "avif"))]
+use crate::transcode_image::{transcode_image, DISALLOW_IMAGE_TRANSCODING};
 
-pub async fn proxy(req: HttpRequest, src: ImageSource) -> HttpResponse {
-    let Ok(resp) = get_image(&req, src).await else {
-        return HttpResponse::InternalServerError().finish();
-    };
+pub async fn proxy(
+    req: HttpRequest,
+    src: ImageSource,
+) -> Result<HttpResponse, Box<dyn std::error::Error>> {
+    let mut resp = get_image(&req, src).await?;
 
     let mut response = HttpResponse::build(resp.status());
 
     copy_response_headers(&resp, &mut response);
 
+    if !*DISALLOW_IMAGE_TRANSCODING {
+        match transcode_image(
+            resp,
+            &mut response,
+            #[cfg(feature = "avif")]
+            true,
+        )
+        .await?
+        {
+            Either::Left(http_response) => return Ok(http_response),
+            Either::Right(image_response) => resp = image_response,
+        }
+    }
+
     if let Some(content_length) = get_content_length(resp.headers()) {
         response.no_chunking(content_length);
     }
 
-    response.streaming(resp.bytes_stream())
+    Ok(response.streaming(resp.bytes_stream()))
 }
 
 #[derive(PartialEq)]

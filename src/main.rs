@@ -2,10 +2,14 @@ mod client;
 mod headers;
 #[cfg(feature = "invidious")]
 mod proxy_image;
+#[cfg(any(feature = "webp", feature = "avif"))]
+mod transcode_image;
 mod ump_stream;
 mod utils;
 
 use actix_web::http::{Method, StatusCode};
+#[cfg(any(feature = "webp", feature = "avif"))]
+use actix_web::Either;
 use actix_web::{web, App, HttpRequest, HttpResponse, HttpServer};
 use client::create_request;
 use listenfd::ListenFd;
@@ -29,6 +33,8 @@ use ump_stream::UmpTransformStream;
 
 use crate::client::CLIENT;
 use crate::headers::{add_headers, copy_response_headers, get_content_length};
+#[cfg(any(feature = "webp", feature = "avif"))]
+use crate::transcode_image::{transcode_image, DISALLOW_IMAGE_TRANSCODING};
 
 #[cfg(feature = "mimalloc")]
 #[global_allocator]
@@ -129,9 +135,9 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
 
     #[cfg(feature = "invidious")]
     if matches!(req.path().get(0..4), Some("/vi/") | Some("/sb/")) {
-        return Ok(proxy_image::proxy(req, proxy_image::ImageSource::YtImg).await);
+        return proxy_image::proxy(req, proxy_image::ImageSource::YtImg).await;
     } else if req.path().starts_with("/ggpht/") {
-        return Ok(proxy_image::proxy(req, proxy_image::ImageSource::GgPht).await);
+        return proxy_image::proxy(req, proxy_image::ImageSource::GgPht).await;
     }
 
     // parse query string
@@ -207,13 +213,7 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
         return Err("No host provided".into());
     };
 
-    #[cfg(any(feature = "webp", feature = "avif"))]
-    let disallow_image_transcoding = utils::get_env_bool("DISALLOW_IMAGE_TRANSCODING");
-
     let rewrite = query.get("rewrite") != Some("false");
-
-    #[cfg(feature = "avif")]
-    let avif = query.get("avif") == Some("true");
 
     let Some(domain) = RE_DOMAIN
         .captures(host.as_str())
@@ -264,6 +264,9 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
         }
     }
 
+    #[cfg(feature = "avif")]
+    let avif = query.get("avif") == Some("true");
+
     let range = query.get("range").map(|s| s.to_string());
 
     let qs = {
@@ -298,92 +301,30 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
             .insert("User-Agent", ANDROID_USER_AGENT.parse().unwrap());
     }
 
-    let resp = CLIENT.execute(request).await?;
+    #[cfg_attr(not(any(feature = "webp", feature = "avif")), allow(unused_mut))]
+    let mut resp = CLIENT.execute(request).await?;
 
     let mut response = HttpResponse::build(resp.status());
 
     copy_response_headers(&resp, &mut response);
 
     if rewrite {
-        if let Some(content_type) = resp.headers().get("content-type") {
-            #[cfg(feature = "avif")]
-            if !disallow_image_transcoding
-                && (content_type == "image/webp" || content_type == "image/jpeg" && avif)
+        #[cfg(any(feature = "webp", feature = "avif"))]
+        if !*DISALLOW_IMAGE_TRANSCODING {
+            match transcode_image(
+                resp,
+                &mut response,
+                #[cfg(feature = "avif")]
+                avif,
+            )
+            .await?
             {
-                let resp_bytes = resp.bytes().await.unwrap();
-                let (body, content_type) = spawn_blocking(|| {
-                    use ravif::{Encoder, Img};
-                    use rgb::FromSlice;
-
-                    let image = image::load_from_memory(&resp_bytes).unwrap();
-
-                    let width = image.width() as usize;
-                    let height = image.height() as usize;
-
-                    let buf = image.into_rgb8();
-                    let buf = buf.as_raw().as_rgb();
-
-                    let buffer = Img::new(buf, width, height);
-
-                    let res = Encoder::new()
-                        .with_quality(80f32)
-                        .with_speed(7)
-                        .encode_rgb(buffer);
-
-                    if let Ok(res) = res {
-                        (res.avif_file.to_vec(), "image/avif")
-                    } else {
-                        (resp_bytes.into(), "image/jpeg")
-                    }
-                })
-                .await
-                .unwrap();
-                response.content_type(content_type);
-                return Ok(response.body(body));
+                Either::Left(http_response) => return Ok(http_response),
+                Either::Right(image_response) => resp = image_response,
             }
+        }
 
-            #[cfg(feature = "webp")]
-            if !disallow_image_transcoding && content_type == "image/jpeg" {
-                let resp_bytes = resp.bytes().await.unwrap();
-                let (body, content_type) = spawn_blocking(|| {
-                    use libwebp_sys::{WebPEncodeRGB, WebPFree};
-
-                    let image = image::load_from_memory(&resp_bytes).unwrap();
-                    let width = image.width();
-                    let height = image.height();
-
-                    let quality = 85;
-
-                    let data = image.as_rgb8().unwrap().as_raw();
-
-                    let bytes: Vec<u8> = unsafe {
-                        let mut out_buf = std::ptr::null_mut();
-                        let stride = width as i32 * 3;
-                        let len: usize = WebPEncodeRGB(
-                            data.as_ptr(),
-                            width as i32,
-                            height as i32,
-                            stride,
-                            quality as f32,
-                            &mut out_buf,
-                        );
-                        let vec = std::slice::from_raw_parts(out_buf, len).into();
-                        WebPFree(out_buf as *mut _);
-                        vec
-                    };
-
-                    if bytes.len() < resp_bytes.len() {
-                        (bytes, "image/webp")
-                    } else {
-                        (resp_bytes.into(), "image/jpeg")
-                    }
-                })
-                .await
-                .unwrap();
-                response.content_type(content_type);
-                return Ok(response.body(body));
-            }
-
+        if let Some(content_type) = resp.headers().get("content-type") {
             if content_type == "application/x-mpegurl"
                 || content_type == "application/vnd.apple.mpegurl"
             {
@@ -409,6 +350,7 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
 
                 return Ok(response.body(modified));
             }
+
             if content_type == "video/vnd.mpeg.dash.mpd" || content_type == "application/dash+xml" {
                 let resp_str = resp.text().await.unwrap();
                 let mut new_resp = resp_str.clone();

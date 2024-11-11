@@ -27,6 +27,7 @@ blake3 = { version = "1.5.1", optional = true }
 bytes = "1.6.0"
 futures-util = "0.3.30"
 listenfd = "1.0.1"
+thiserror = { version = "2.0.3", optional = true }
 
 [features]
 default = ["webp", "mimalloc", "reqwest-rustls", "qhash"]
@@ -34,8 +35,8 @@ default = ["webp", "mimalloc", "reqwest-rustls", "qhash"]
 reqwest-rustls = ["reqwest/rustls-tls"]
 reqwest-native-tls = ["reqwest/default-tls"]
 
-avif = ["dep:ravif", "dep:rgb", "dep:image"]
-webp = ["dep:libwebp-sys", "dep:image"]
+avif = ["dep:ravif", "dep:rgb", "dep:image", "dep:thiserror"]
+webp = ["dep:libwebp-sys", "dep:image", "dep:thiserror"]
 
 mimalloc = ["dep:mimalloc"]
 
