@@ -13,6 +13,7 @@ use std::io::ErrorKind;
 use std::net::TcpListener;
 use std::os::unix::net::UnixListener;
 use std::str::FromStr;
+use std::time::{SystemTime, UNIX_EPOCH};
 use std::{env, io};
 
 #[cfg(not(any(feature = "reqwest-native-tls", feature = "reqwest-rustls")))]
@@ -281,6 +282,20 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
     }
 
     let video_playback = req.path().eq("/videoplayback");
+
+    if video_playback {
+        if let Some(expiry) = query.get("expire") {
+            let expiry = expiry.parse::<i64>()?;
+            let now = SystemTime::now();
+            let now = now.duration_since(UNIX_EPOCH)
+                .expect("Time went backwards")
+                .as_secs() as i64;
+            if now < expiry {
+                return Err("Expire time in past".into());
+            }
+        }
+    }
+
     let is_android = video_playback && query.get("c").unwrap_or("").eq("ANDROID");
     let is_web = video_playback && query.get("c").unwrap_or("").eq("WEB");
 
