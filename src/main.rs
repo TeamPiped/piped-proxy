@@ -1,7 +1,7 @@
 mod ump_stream;
 mod utils;
 
-use actix_web::http::{Method, StatusCode};
+use actix_web::http::StatusCode;
 use actix_web::{web, App, HttpRequest, HttpResponse, HttpResponseBuilder, HttpServer};
 use listenfd::ListenFd;
 use once_cell::sync::Lazy;
@@ -12,12 +12,15 @@ use std::error::Error;
 use std::io::ErrorKind;
 use std::net::TcpListener;
 use std::os::unix::net::UnixListener;
+use std::str::FromStr;
 use std::{env, io};
 
 #[cfg(not(any(feature = "reqwest-native-tls", feature = "reqwest-rustls")))]
 compile_error!("feature \"reqwest-native-tls\" or \"reqwest-rustls\" must be set for proxy to have TLS support");
 
 use futures_util::TryStreamExt;
+use http::{HeaderName, Method};
+use reqwest::header::HeaderValue;
 #[cfg(any(feature = "webp", feature = "avif", feature = "qhash"))]
 use tokio::task::spawn_blocking;
 use ump_stream::UmpTransformStream;
@@ -173,11 +176,13 @@ fn is_header_allowed(header: &str) -> bool {
 }
 
 async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
-    if req.method() == Method::OPTIONS {
+    if req.method() == actix_web::http::Method::OPTIONS {
         let mut response = HttpResponse::Ok();
         add_headers(&mut response);
         return Ok(response.finish());
-    } else if req.method() != Method::GET && req.method() != Method::HEAD {
+    } else if req.method() != actix_web::http::Method::GET
+        && req.method() != actix_web::http::Method::HEAD
+    {
         let mut response = HttpResponse::MethodNotAllowed();
         add_headers(&mut response);
         return Ok(response.finish());
@@ -331,7 +336,7 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
         if is_web && video_playback {
             Method::POST
         } else {
-            req.method().clone()
+            Method::from_str(req.method().as_str())?
         }
     };
 
@@ -344,18 +349,22 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
     let request_headers = request.headers_mut();
 
     for (key, value) in req.headers() {
-        if is_header_allowed(key.as_str()) {
-            request_headers.insert(key, value.clone());
+        let key = key.as_str();
+        if is_header_allowed(key) {
+            request_headers.insert(
+                HeaderName::from_str(key)?,
+                HeaderValue::from_bytes(value.as_bytes())?,
+            );
         }
     }
 
     if is_android {
-        request_headers.insert("User-Agent", ANDROID_USER_AGENT.parse().unwrap());
+        request_headers.insert("User-Agent", ANDROID_USER_AGENT.parse()?);
     }
 
     let resp = CLIENT.execute(request).await?;
 
-    let mut response = HttpResponse::build(resp.status());
+    let mut response = HttpResponse::build(StatusCode::from_u16(resp.status().as_u16())?);
 
     add_headers(&mut response);
 
