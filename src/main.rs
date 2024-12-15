@@ -290,7 +290,7 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
             let now = now.duration_since(UNIX_EPOCH)
                 .expect("Time went backwards")
                 .as_secs() as i64;
-            if now < expiry {
+            if now > expiry {
                 return Err("Expire time in past".into());
             }
         }
