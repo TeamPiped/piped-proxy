@@ -1226,12 +1226,13 @@ dependencies = [
 
 [[package]]
 name = "libwebp-sys"
-version = "0.11.0"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6f80c65814da7a8617fab435f2f3ebe368958f8a4bb7e26105fbbe08a285dafe"
+checksum = "af130547aee10d263d7cc28ac1b3612bf1664b5ee2429ec133e4f4ee1e75f720"
 dependencies = [
  "cc",
  "glob",
+ "pkg-config",
 ]
 
 [[package]]
