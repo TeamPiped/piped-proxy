@@ -3,7 +3,6 @@ use reqwest::Url;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::env;
-
 #[cfg(feature = "prefix-path")]
 {
     use once_cell::sync::Lazy;
@@ -52,7 +51,7 @@ fn finalize_url(path: &str, query: BTreeMap<String, String>) -> String {
             }
         };
 
-        if qhash.is_some() {
+        if let Some(qhash) = qhash {
             let mut query = QString::new(query.into_iter().collect::<Vec<_>>());
             query.add_pair(("qhash", qhash.unwrap()));
             #[cfg(not(feature = "prefix-path"))]
@@ -65,6 +64,8 @@ fn finalize_url(path: &str, query: BTreeMap<String, String>) -> String {
             {
                 return format!("{}{}?{}", PREFIX_PATH.as_ref().unwrap().to_string(), path, query);
             }
+            query.add_pair(("qhash", qhash));
+            return format!("{}?{}", path, query);
         }
     }
 
@@ -119,5 +120,12 @@ pub fn escape_xml(raw: &str) -> Cow<'_, str> {
             }
         }
         Cow::Owned(escaped)
+    }
+}
+
+pub fn get_env_bool(key: &str) -> bool {
+    match env::var(key) {
+        Ok(val) => val.to_lowercase() == "true" || val == "1",
+        Err(_) => false,
     }
 }
