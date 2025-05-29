@@ -1,3 +1,6 @@
+mod sabr_handler;
+mod sabr_parser;
+mod sabr_request;
 mod ump_stream;
 mod utils;
 
@@ -176,21 +179,28 @@ fn is_header_allowed(header: &str) -> bool {
     )
 }
 
-async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
+async fn index(req: HttpRequest, body: Option<web::Bytes>) -> Result<HttpResponse, Box<dyn Error>> {
     if req.method() == actix_web::http::Method::OPTIONS {
         let mut response = HttpResponse::Ok();
-        add_headers(&mut response);
-        return Ok(response.finish());
-    } else if req.method() != actix_web::http::Method::GET
-        && req.method() != actix_web::http::Method::HEAD
-    {
-        let mut response = HttpResponse::MethodNotAllowed();
         add_headers(&mut response);
         return Ok(response.finish());
     }
 
     // parse query string
     let mut query = QString::from(req.query_string());
+
+    // Check if this is a SABR request
+    let is_sabr = req.path().eq("/videoplayback") && query.get("sabr").is_some();
+
+    // Allow POST for SABR requests, otherwise only GET and HEAD
+    if !is_sabr
+        && req.method() != actix_web::http::Method::GET
+        && req.method() != actix_web::http::Method::HEAD
+    {
+        let mut response = HttpResponse::MethodNotAllowed();
+        add_headers(&mut response);
+        return Ok(response.finish());
+    }
 
     #[cfg(feature = "qhash")]
     {
@@ -281,13 +291,20 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
         return Err("Domain not allowed".into());
     }
 
+    // Handle SABR requests for UMP streams
+    if is_sabr && req.method() == actix_web::http::Method::POST {
+        let request_body = body.map(|b| String::from_utf8_lossy(&b).to_string());
+        return sabr_handler::handle_sabr_request(req, query, host, &CLIENT, request_body).await;
+    }
+
     let video_playback = req.path().eq("/videoplayback");
 
     if video_playback {
         if let Some(expiry) = query.get("expire") {
             let expiry = expiry.parse::<i64>()?;
             let now = SystemTime::now();
-            let now = now.duration_since(UNIX_EPOCH)
+            let now = now
+                .duration_since(UNIX_EPOCH)
                 .expect("Time went backwards")
                 .as_secs() as i64;
             if now > expiry {
