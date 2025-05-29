@@ -61,12 +61,14 @@ pub struct StreamerContext {
     pub playback_cookie: Option<Vec<u8>>,
     #[prost(bytes = "vec", optional, tag = "4")]
     pub gp: Option<Vec<u8>>,
-    #[prost(bytes = "vec", repeated, tag = "5")]
-    pub field5: Vec<Vec<u8>>,
+    #[prost(message, repeated, tag = "5")]
+    pub field5: Vec<Fqa>,
     #[prost(int32, repeated, tag = "6")]
     pub field6: Vec<i32>,
     #[prost(string, optional, tag = "7")]
     pub field7: Option<String>,
+    #[prost(message, optional, tag = "8")]
+    pub field8: Option<Gqa>,
 }
 
 #[derive(Clone, PartialEq, Message)]
@@ -197,12 +199,16 @@ pub struct VideoPlaybackAbrRequest {
     pub player_time_ms: Option<i64>,
     #[prost(bytes = "vec", optional, tag = "5")]
     pub video_playback_ustreamer_config: Option<Vec<u8>>,
+    #[prost(message, optional, tag = "6")]
+    pub lo: Option<Lo>,
     #[prost(message, repeated, tag = "16")]
     pub selected_audio_format_ids: Vec<FormatId>,
     #[prost(message, repeated, tag = "17")]
     pub selected_video_format_ids: Vec<FormatId>,
     #[prost(message, optional, tag = "19")]
     pub streamer_context: Option<StreamerContext>,
+    #[prost(message, optional, tag = "21")]
+    pub field21: Option<OQa>,
     #[prost(int32, optional, tag = "22")]
     pub field22: Option<i32>,
     #[prost(int32, optional, tag = "23")]
@@ -251,6 +257,11 @@ impl SabrRequestBuilder {
             streamer_context: StreamerContext {
                 field5: Vec::new(),
                 field6: Vec::new(),
+                field7: None,
+                field8: None,
+                gp: None,
+                playback_cookie: None,
+                po_token: None,
                 // Basic client info matching googlevideo
                 client_info: Some(ClientInfo {
                     client_name: Some(1),
@@ -259,7 +270,6 @@ impl SabrRequestBuilder {
                     os_version: Some("10.0".to_string()),
                     ..Default::default()
                 }),
-                ..Default::default()
             },
             video_playback_ustreamer_config: None,
             selected_audio_format_ids: Vec::new(),
@@ -341,10 +351,9 @@ impl SabrRequestBuilder {
     }
 
     pub fn build(self) -> VideoPlaybackAbrRequest {
-        // selectedFormatIds should contain all format IDs (both audio and video)
-        let mut selected_format_ids = Vec::new();
-        selected_format_ids.extend(self.selected_audio_format_ids.clone());
-        selected_format_ids.extend(self.selected_video_format_ids.clone());
+        // For initial requests, selectedFormatIds should be empty
+        // It represents previously initialized formats, which don't exist yet
+        let selected_format_ids = Vec::new();
 
         VideoPlaybackAbrRequest {
             client_abr_state: Some(self.client_abr_state),
@@ -358,6 +367,8 @@ impl SabrRequestBuilder {
             field22: Some(0),
             field23: Some(0),
             field1000: Vec::new(),
+            lo: None,
+            field21: None,
         }
     }
 
@@ -397,6 +408,70 @@ pub fn create_buffered_range(
         end_segment_index: Some(end_segment_index),
         time_range: None,
     }
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct LoField4 {
+    #[prost(int32, optional, tag = "1")]
+    pub field1: Option<i32>,
+    #[prost(int32, optional, tag = "2")]
+    pub field2: Option<i32>,
+    #[prost(int32, optional, tag = "3")]
+    pub field3: Option<i32>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct Lo {
+    #[prost(message, optional, tag = "1")]
+    pub format_id: Option<FormatId>,
+    #[prost(int32, optional, tag = "2")]
+    pub lj: Option<i32>,
+    #[prost(int32, optional, tag = "3")]
+    pub sequence_number: Option<i32>,
+    #[prost(message, optional, tag = "4")]
+    pub field4: Option<LoField4>,
+    #[prost(int32, optional, tag = "5")]
+    pub mz: Option<i32>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct OQa {
+    #[prost(string, repeated, tag = "1")]
+    pub field1: Vec<String>,
+    #[prost(bytes = "vec", optional, tag = "2")]
+    pub field2: Option<Vec<u8>>,
+    #[prost(string, optional, tag = "3")]
+    pub field3: Option<String>,
+    #[prost(int32, optional, tag = "4")]
+    pub field4: Option<i32>,
+    #[prost(int32, optional, tag = "5")]
+    pub field5: Option<i32>,
+    #[prost(string, optional, tag = "6")]
+    pub field6: Option<String>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct Hqa {
+    #[prost(int32, optional, tag = "1")]
+    pub code: Option<i32>,
+    #[prost(string, optional, tag = "2")]
+    pub message: Option<String>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct Gqa {
+    #[prost(bytes = "vec", optional, tag = "1")]
+    pub field1: Option<Vec<u8>>,
+    #[prost(message, optional, tag = "2")]
+    pub field2: Option<Hqa>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct Fqa {
+    #[prost(int32, optional, tag = "1")]
+    pub r#type: Option<i32>,
+    #[prost(bytes = "vec", optional, tag = "2")]
+    pub value: Option<Vec<u8>>,
 }
 
 #[cfg(test)]

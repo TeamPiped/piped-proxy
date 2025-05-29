@@ -104,7 +104,26 @@ impl SabrRequestData {
         let video_playback_ustreamer_config = json
             .get("videoPlaybackUstreamerConfig")
             .and_then(|v| v.as_str())
-            .and_then(|s| general_purpose::STANDARD.decode(s).ok());
+            .and_then(|s| {
+                eprintln!("videoPlaybackUstreamerConfig string length: {}", s.len());
+                eprintln!(
+                    "videoPlaybackUstreamerConfig first 100 chars: {}",
+                    &s[..std::cmp::min(100, s.len())]
+                );
+                match general_purpose::URL_SAFE.decode(s) {
+                    Ok(decoded) => {
+                        eprintln!(
+                            "Successfully decoded videoPlaybackUstreamerConfig: {} bytes",
+                            decoded.len()
+                        );
+                        Some(decoded)
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to decode videoPlaybackUstreamerConfig: {}", e);
+                        None
+                    }
+                }
+            });
 
         let po_token = json
             .get("poToken")
@@ -241,39 +260,8 @@ pub async fn handle_sabr_request(
 
         // If no buffered ranges provided, create initial ones like in the working example
         let buffered_ranges = if data.buffered_ranges.is_empty() {
-            let mut ranges = Vec::new();
-
-            // Create buffered range for audio format (like the working example)
-            if let Some(audio_format) = data.selected_audio_format_ids.first() {
-                ranges.push(create_buffered_range(
-                    audio_format.clone(),
-                    0,     // start_time_ms
-                    20000, // duration_ms (20 seconds like working example)
-                    1,     // start_segment_index
-                    2,     // end_segment_index
-                ));
-            }
-
-            // Create buffered ranges for video format (like the working example)
-            if let Some(video_format) = data.selected_video_format_ids.first() {
-                ranges.push(create_buffered_range(
-                    video_format.clone(),
-                    0,     // start_time_ms
-                    15021, // duration_ms (like working example)
-                    1,     // start_segment_index
-                    3,     // end_segment_index
-                ));
-
-                ranges.push(create_buffered_range(
-                    video_format.clone(),
-                    10014, // start_time_ms (like working example)
-                    10014, // duration_ms (like working example)
-                    3,     // start_segment_index
-                    4,     // end_segment_index
-                ));
-            }
-
-            ranges
+            // For initial request, buffered ranges should be empty
+            Vec::new()
         } else {
             data.buffered_ranges.clone()
         };
@@ -377,11 +365,6 @@ pub async fn handle_sabr_request(
     // Create POST request with protobuf body
     let mut request = Request::new(Method::POST, url);
     request.body_mut().replace(Body::from(encoded_request));
-
-    // Add Content-Type header for protobuf
-    request
-        .headers_mut()
-        .insert("Content-Type", "application/x-protobuf".parse().unwrap());
 
     // Execute the request
     let resp = client.execute(request).await?;

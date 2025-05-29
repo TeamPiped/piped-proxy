@@ -220,7 +220,7 @@ Selected Formats:
 				},
 			],
 			bufferedRanges: [], // Empty for initial request
-			videoPlaybackUstreamerConfig: Buffer.from(videoPlaybackUstreamerConfig).toString("base64"),
+			videoPlaybackUstreamerConfig: videoPlaybackUstreamerConfig, // Already base64 encoded
 			poToken: poToken ? Buffer.from(poToken, "utf-8").toString("base64") : undefined,
 		};
 
