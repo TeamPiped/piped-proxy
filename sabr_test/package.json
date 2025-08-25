@@ -1,0 +1,27 @@
+{
+  "name": "sabr_test",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "description": "SABR (Server-side Adaptive Bitrate) testing tool for piped-proxy",
+  "scripts": {
+    "start": "bun run index.ts",
+    "test": "bun run index.ts --verbose",
+    "help": "bun run index.ts --help"
+  },
+  "dependencies": {
+    "youtubei.js": "^13.4.0",
+    "commander": "^14.0.0",
+    "cli-progress": "^3.12.0",
+    "bgutils-js": "^3.2.0",
+    "jsdom": "^26.1.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/cli-progress": "^3.11.6",
+    "@types/jsdom": "^21.1.7"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}

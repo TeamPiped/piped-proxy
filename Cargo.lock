@@ -1695,6 +1695,7 @@ name = "piped-proxy"
 version = "0.1.0"
 dependencies = [
  "actix-web",
+ "base64",
  "blake3",
  "bytes",
  "futures-util",
@@ -1704,11 +1705,13 @@ dependencies = [
  "listenfd",
  "mimalloc",
  "once_cell",
+ "prost",
  "qstring",
  "ravif 0.12.0",
  "regex",
  "reqwest",
  "rgb",
+ "serde_json",
  "tokio",
 ]
 
@@ -1766,6 +1769,29 @@ version = "1.0.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "52717f9a02b6965224f95ca2a81e2e0c5c43baacd28ca057577988930b6c3d5b"
 dependencies = [
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "prost"
+version = "0.13.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2796faa41db3ec313a31f7624d9286acf277b52de526150b7e69f3debf891ee5"
+dependencies = [
+ "bytes",
+ "prost-derive",
+]
+
+[[package]]
+name = "prost-derive"
+version = "0.13.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8a56d757972c98b346a9b766e3f02746cde6dd1cd1d1d563472929fdd74bec4d"
+dependencies = [
+ "anyhow",
+ "itertools",
+ "proc-macro2",
  "quote",
  "syn",
 ]
