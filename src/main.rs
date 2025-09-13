@@ -254,21 +254,6 @@ fn handle_range_response_correction(
         None => return false, // Invalid range format
     };
 
-    // Handle cases where YouTube truncated the range to fit file size
-    if range_request.start > range_request.end {
-        // Note: YouTube corrected the range but we still apply our fix
-        // This is logged to stderr for production debugging if needed
-        // Not Recommended for Public Instances!
-        eprintln!(
-            "Range truncated by YouTube: requested {}-{}, got {}-{} (file size: {})",
-            range_request.start,
-            range_request.end,
-            range_request.start,
-            range_request.end,
-            total_size
-        );
-    }
-
     // Apply proper HTTP range headers
     apply_range_headers(response, &range_request);
     return true;
