@@ -176,6 +176,127 @@ fn is_header_allowed(header: &str) -> bool {
     )
 }
 
+struct RangeRequest {
+    start: u64,
+    end: u64,
+    total_size: u64,
+}
+
+fn parse_range(range_str: &str, total_size: u64) -> Option<RangeRequest> {
+    let range_parts: Vec<&str> = range_str.split('-').collect();
+
+    if range_parts.len() != 2 {
+        return None;
+    }
+
+    let start_result = range_parts[0].parse::<u64>();
+    let start = start_result.unwrap_or(0);
+
+    // Parse end position - if empty, use total_size-1 (open-ended range)
+    let end = if range_parts[1].is_empty() {
+        total_size.saturating_sub(1) // Avoid underflow
+    } else {
+        let end_result = range_parts[1].parse::<u64>();
+        let parsed_end = end_result.unwrap_or(total_size.saturating_sub(1));
+        parsed_end.min(total_size.saturating_sub(1))
+    };
+
+    Some(RangeRequest { start, end, total_size })
+}
+
+fn handle_range_response_correction(
+    response: &mut HttpResponseBuilder,
+    range_str: Option<&String>,
+    resp: &reqwest::Response,
+) -> bool {
+    // Check if this is a range request (either in headers or query string)
+    let has_range_request = resp.headers().contains_key("range") || range_str.is_some();
+
+    // Only apply correction if we have a range request and response is 200 (should be 206)
+    if !has_range_request
+        || !resp.status().is_success()
+        || resp.status() == reqwest::StatusCode::PARTIAL_CONTENT 
+    {
+        return false
+    }
+
+    // Extract range string from query parameter
+    let range_value = match range_str {
+        Some(r) => r,
+        None => return false, // Should not happen due to has_range_request check
+    };
+
+    // Get content length from response headers
+    let content_length = match resp.headers().get("content-length") {
+        Some(cl) => cl,
+        None => return false, // Cannot determine file size
+    };
+
+    // Convert header value to string
+    let clen_str = match content_length.to_str() {
+        Ok(s) => s,
+        Err(_) => return false, // Invalid header encoding
+    };
+
+    // Parse total file size from content-length
+    let total_size = match clen_str.parse::<u64>() {
+        Ok(size) => size,
+        Err(_) => return false, // Invalid number format
+    };
+
+    if total_size == 0 {
+        return false;
+    }
+
+    // Parse the range request into start/end positions
+    let range_request = match parse_range(range_value, total_size) {
+        Some(r) => r,
+        None => return false, // Invalid range format
+    };
+
+    // Handle cases where YouTube truncated the range to fit file size
+    if range_request.start > range_request.end {
+        // Note: YouTube corrected the range but we still apply our fix
+        // This is logged to stderr for production debugging if needed
+        // Not Recommended for Public Instances!
+        eprintln!(
+            "Range truncated by YouTube: requested {}-{}, got {}-{} (file size: {})",
+            range_request.start,
+            range_request.end,
+            range_request.start,
+            range_request.end,
+            total_size
+        );
+    }
+
+    // Apply proper HTTP range headers
+    apply_range_headers(response, &range_request);
+    return true;
+}
+
+fn apply_range_headers(response: &mut HttpResponseBuilder, range_request: &RangeRequest) {
+    let content_range_value = format!(
+        "bytes {}-{}/{}",
+        range_request.start,
+        range_request.end,
+        range_request.total_size
+    );
+
+    // Use total_size when range was truncated by YouTube (start > end)
+    // Otherwise calculate normally
+    let actual_length = if range_request.start > range_request.end {
+        range_request.total_size
+    } else {
+        range_request.end - range_request.start + 1
+    };
+
+    // Set proper partial content response
+    response.status(actix_web::http::StatusCode::PARTIAL_CONTENT);
+    // Set required headers for partial content responses
+    response.insert_header(("Content-Range", content_range_value));
+    response.insert_header(("Content-Length", actual_length.to_string()));
+}
+
 async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
     if req.method() == actix_web::http::Method::OPTIONS {
         let mut response = HttpResponse::Ok();
@@ -389,6 +510,10 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
         }
     }
 
+    // Fix range request handling - convert 200 to 206 if we have a range request
+    // and ensure Content-Range header is present
+    handle_range_response_correction(&mut response, range.as_ref(), &resp);
+
     if rewrite {
         if let Some(content_type) = resp.headers().get("content-type") {
             #[cfg(feature = "avif")]
@@ -523,6 +648,10 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
                 if let Some(clen) = clen {
                     if range != &format!("0-{}", clen - 1) {
                         response.status(StatusCode::PARTIAL_CONTENT);
+
+                        // Add proper Content-Range header for UMP streams
+                        let content_range_value = format!("bytes {}/{}", range, clen);
+                        response.insert_header(("Content-Range", content_range_value.clone()));
                     }
                 }
             }
