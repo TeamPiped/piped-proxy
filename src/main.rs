@@ -201,70 +201,55 @@ fn parse_range(range_str: &str, total_size: u64) -> Option<RangeRequest> {
         parsed_end.min(total_size.saturating_sub(1))
     };
 
-    Some(RangeRequest { start, end, total_size })
+    Some(RangeRequest {
+        start,
+        end,
+        total_size,
+    })
 }
 
 fn handle_range_response_correction(
     response: &mut HttpResponseBuilder,
     range_str: Option<&String>,
     resp: &reqwest::Response,
-) -> bool {
+) -> Option<()> {
     // Check if this is a range request (either in headers or query string)
     let has_range_request = resp.headers().contains_key("range") || range_str.is_some();
 
     // Only apply correction if we have a range request and response is 200 (should be 206)
     if !has_range_request
         || !resp.status().is_success()
-        || resp.status() == reqwest::StatusCode::PARTIAL_CONTENT 
+        || resp.status() == reqwest::StatusCode::PARTIAL_CONTENT
     {
-        return false
+        return None;
     }
 
-    // Extract range string from query parameter
-    let range_value = match range_str {
-        Some(r) => r,
-        None => return false, // Should not happen due to has_range_request check
-    };
-
     // Get content length from response headers
-    let content_length = match resp.headers().get("content-length") {
-        Some(cl) => cl,
-        None => return false, // Cannot determine file size
-    };
-
-    // Convert header value to string
-    let clen_str = match content_length.to_str() {
-        Ok(s) => s,
-        Err(_) => return false, // Invalid header encoding
-    };
-
-    // Parse total file size from content-length
-    let total_size = match clen_str.parse::<u64>() {
-        Ok(size) => size,
-        Err(_) => return false, // Invalid number format
-    };
+    let total_size = resp
+        .headers()
+        .get("content-length")?
+        .to_str()
+        .ok()?
+        .parse::<u64>()
+        .ok()?;
 
     if total_size == 0 {
-        return false;
+        return None;
     }
 
     // Parse the range request into start/end positions
-    let range_request = match parse_range(range_value, total_size) {
-        Some(r) => r,
-        None => return false, // Invalid range format
-    };
+    let range_request = parse_range(range_str?, total_size)?;
 
     // Apply proper HTTP range headers
     apply_range_headers(response, &range_request);
-    return true;
+
+    Some(())
 }
 
 fn apply_range_headers(response: &mut HttpResponseBuilder, range_request: &RangeRequest) {
     let content_range_value = format!(
         "bytes {}-{}/{}",
-        range_request.start,
-        range_request.end,
-        range_request.total_size
+        range_request.start, range_request.end, range_request.total_size
     );
 
     // Use total_size when range was truncated by YouTube (start > end)
@@ -393,7 +378,8 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
         if let Some(expiry) = query.get("expire") {
             let expiry = expiry.parse::<i64>()?;
             let now = SystemTime::now();
-            let now = now.duration_since(UNIX_EPOCH)
+            let now = now
+                .duration_since(UNIX_EPOCH)
                 .expect("Time went backwards")
                 .as_secs() as i64;
             if now > expiry {
