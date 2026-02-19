@@ -44,5 +44,7 @@ optimized = ["libwebp-sys?/sse41", "libwebp-sys?/avx2", "libwebp-sys?/neon"]
 
 qhash = ["blake3"]
 
+prefix-path = []
+
 [profile.release]
 lto = true
