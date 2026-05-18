@@ -3,6 +3,14 @@ use reqwest::Url;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::env;
+#[cfg(feature = "prefix-path")]
+{
+    use once_cell::sync::Lazy;
+    static PREFIX_PATH: Lazy<Option<String>> = Lazy::new(|| match env::var("PREFIX_PATH") {
+        Ok(v) => Some(String::from(v)),
+        Err(e) => panic!("$PREFIX_PATH is not set ({})", e)
+    });
+}
 
 pub fn read_buf(buf: &[u8], pos: &mut usize) -> u8 {
     let byte = buf[*pos];
@@ -45,13 +53,33 @@ fn finalize_url(path: &str, query: BTreeMap<String, String>) -> String {
 
         if let Some(qhash) = qhash {
             let mut query = QString::new(query.into_iter().collect::<Vec<_>>());
+            query.add_pair(("qhash", qhash.unwrap()));
+            #[cfg(not(feature = "prefix-path"))]
+            {
+                return format!("{}?{}", path, query);
+            }
+
+
+            #[cfg(feature = "prefix-path")]
+            {
+                return format!("{}{}?{}", PREFIX_PATH.as_ref().unwrap().to_string(), path, query);
+            }
             query.add_pair(("qhash", qhash));
             return format!("{}?{}", path, query);
         }
     }
 
     let query = QString::new(query.into_iter().collect::<Vec<_>>());
-    format!("{}?{}", path, query)
+    #[cfg(not(feature = "prefix-path"))]
+    {
+        format!("{}?{}", path, query)
+    }
+
+
+    #[cfg(feature = "prefix-path")]
+    {
+        format!("{}{}?{}", PREFIX_PATH.as_ref().unwrap().to_string(), path, query)
+    }
 }
 
 pub fn localize_url(url: &str, host: &str) -> String {
