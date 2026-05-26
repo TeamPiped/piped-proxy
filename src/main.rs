@@ -211,6 +211,7 @@ fn parse_range(range_str: &str, total_size: u64) -> Option<RangeRequest> {
 fn handle_range_response_correction(
     response: &mut HttpResponseBuilder,
     range_str: Option<&String>,
+    clen: Option<u64>,
     resp: &reqwest::Response,
 ) -> Option<()> {
     // Check if this is a range request (either in headers or query string)
@@ -224,14 +225,24 @@ fn handle_range_response_correction(
         return None;
     }
 
-    // Get content length from response headers
-    let total_size = resp
-        .headers()
-        .get("content-length")?
-        .to_str()
-        .ok()?
-        .parse::<u64>()
-        .ok()?;
+    // total_size must be the FULL file size, taken from the videoplayback URL's
+    // `clen` query param. The response's Content-Length is the size of the chunk
+    // returned for the current range (clen - start when start > 0), NOT the full
+    // file. Using Content-Length as total_size produced Content-Range headers
+    // where end < start with a too-small denominator -- Chromium's media stack
+    // rejects those as malformed, which presented as a seek-past-buffer hang on
+    // itag-18 progressive playback. Fall back to Content-Length only when clen
+    // is absent (defensive; videoplayback URLs always carry clen in practice).
+    let total_size = match clen {
+        Some(c) if c > 0 => c,
+        _ => resp
+            .headers()
+            .get("content-length")?
+            .to_str()
+            .ok()?
+            .parse::<u64>()
+            .ok()?,
+    };
 
     if total_size == 0 {
         return None;
@@ -482,8 +493,10 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
     }
 
     // Fix range request handling - convert 200 to 206 if we have a range request
-    // and ensure Content-Range header is present
-    handle_range_response_correction(&mut response, range.as_ref(), &resp);
+    // and ensure Content-Range header is present. `clen` from the videoplayback
+    // URL is the canonical total file size; passed in to avoid mis-deriving it
+    // from the upstream chunk's Content-Length.
+    handle_range_response_correction(&mut response, range.as_ref(), clen, &resp);
 
     if rewrite {
         if let Some(content_type) = resp.headers().get("content-type") {
