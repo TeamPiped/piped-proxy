@@ -225,14 +225,9 @@ fn handle_range_response_correction(
         return None;
     }
 
-    // total_size must be the FULL file size, taken from the videoplayback URL's
-    // `clen` query param. The response's Content-Length is the size of the chunk
-    // returned for the current range (clen - start when start > 0), NOT the full
-    // file. Using Content-Length as total_size produced Content-Range headers
-    // where end < start with a too-small denominator -- Chromium's media stack
-    // rejects those as malformed, which presented as a seek-past-buffer hang on
-    // itag-18 progressive playback. Fall back to Content-Length only when clen
-    // is absent (defensive; videoplayback URLs always carry clen in practice).
+    // total_size is the full file size from the videoplayback URL's `clen`. The
+    // upstream Content-Length is only the current chunk; using it as the total
+    // produced malformed Content-Range that broke itag-18 seek in Chromium.
     let total_size = match clen {
         Some(c) if c > 0 => c,
         _ => resp
@@ -493,9 +488,7 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
     }
 
     // Fix range request handling - convert 200 to 206 if we have a range request
-    // and ensure Content-Range header is present. `clen` from the videoplayback
-    // URL is the canonical total file size; passed in to avoid mis-deriving it
-    // from the upstream chunk's Content-Length.
+    // and ensure Content-Range header is present
     handle_range_response_correction(&mut response, range.as_ref(), clen, &resp);
 
     if rewrite {
