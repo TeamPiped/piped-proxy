@@ -211,6 +211,7 @@ fn parse_range(range_str: &str, total_size: u64) -> Option<RangeRequest> {
 fn handle_range_response_correction(
     response: &mut HttpResponseBuilder,
     range_str: Option<&String>,
+    clen: Option<u64>,
     resp: &reqwest::Response,
 ) -> Option<()> {
     // Check if this is a range request (either in headers or query string)
@@ -224,14 +225,19 @@ fn handle_range_response_correction(
         return None;
     }
 
-    // Get content length from response headers
-    let total_size = resp
-        .headers()
-        .get("content-length")?
-        .to_str()
-        .ok()?
-        .parse::<u64>()
-        .ok()?;
+    // total_size is the full file size from the videoplayback URL's `clen`. The
+    // upstream Content-Length is only the current chunk; using it as the total
+    // produced malformed Content-Range that broke itag-18 seek in Chromium.
+    let total_size = match clen {
+        Some(c) if c > 0 => c,
+        _ => resp
+            .headers()
+            .get("content-length")?
+            .to_str()
+            .ok()?
+            .parse::<u64>()
+            .ok()?,
+    };
 
     if total_size == 0 {
         return None;
@@ -483,7 +489,7 @@ async fn index(req: HttpRequest) -> Result<HttpResponse, Box<dyn Error>> {
 
     // Fix range request handling - convert 200 to 206 if we have a range request
     // and ensure Content-Range header is present
-    handle_range_response_correction(&mut response, range.as_ref(), &resp);
+    handle_range_response_correction(&mut response, range.as_ref(), clen, &resp);
 
     if rewrite {
         if let Some(content_type) = resp.headers().get("content-type") {
